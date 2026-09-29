@@ -27,6 +27,7 @@ import { SettingsPage } from './pages/dashboard/SettingsPage';
 
 // Member view
 import { MemberPortalPage } from './pages/member/MemberPortalPage';
+import { JoinGroupPage } from './pages/JoinGroupPage';
 
 // Payment Processing & Confirmation View (Mobile Money / Carte)
 import { PaymentProcessingPage } from './pages/PaymentProcessingPage';
@@ -59,6 +60,7 @@ export default function App() {
 
           {/* Member Portal Route */}
           <Route path="/member" element={<MemberPortalPage />} />
+          <Route path="/join/:groupId" element={<JoinGroupPage />} />
 
           {/* Secure Payment Processing & Confirmation */}
           <Route path="/payment/processing" element={<PaymentProcessingPage />} />

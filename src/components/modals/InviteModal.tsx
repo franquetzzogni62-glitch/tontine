@@ -23,7 +23,8 @@ export const InviteModal: React.FC<InviteModalProps> = ({
   const [phone, setPhone] = useState('');
   const [memberName, setMemberName] = useState('');
 
-  const inviteLink = `https://tontiflow.africa/join/${groupId}?ref=inv_987`;
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://tontiflow.africa';
+  const inviteLink = `${baseUrl}/join/${groupId}`;
   const whatsappMessage = encodeURIComponent(
     `Bonjour ! Tu es invité(e) à rejoindre notre tontine "${groupName}" sur TontiFlow. Clique ici pour voir les détails et participer : ${inviteLink}`
   );
