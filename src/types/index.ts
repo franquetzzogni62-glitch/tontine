@@ -58,7 +58,8 @@ export interface Member {
   groupsCount: number;
   totalContributed: number;
   totalReceived: number;
-  status: 'active' | 'inactive' | 'flagged';
+  guaranteeBalance?: number; // Caution / Dépôt de garantie
+  status: 'active' | 'inactive' | 'flagged' | 'GUARANTEE_DEPLETED' | 'guarantee_depleted';
   presenceValidated?: boolean;
   notes?: string;
 }
@@ -69,6 +70,8 @@ export interface TontineGroupMember {
   hasPaidToday: boolean;
   totalContributedInGroup: number;
   presenceValidated?: boolean;
+  guaranteeBalance?: number;
+  status?: 'ACTIVE' | 'GUARANTEE_DEPLETED' | 'LATE' | 'active' | 'late' | 'guarantee_depleted';
 }
 
 export interface TontineGroup {
@@ -79,6 +82,7 @@ export interface TontineGroup {
   moderatorId: string;
   contributionAmount: number; // e.g. 25000 FCFA
   moderatorCommission: number; // e.g. 500 FCFA
+  customPenaltyAmount: number; // Montant de la pénalité de retard défini par l'admin (ex: 1000 FCFA)
   commissionType: 'fixed' | 'percentage';
   frequency: Frequency; // 'daily' | 'weekly' | 'monthly'
   currency: string; // 'FCFA' or 'XAF' or 'XOF'
@@ -200,3 +204,43 @@ export interface TontineFinancialSummary {
   paidMembers: { memberId: string; memberName: string; phone: string }[];
   missingMembers: { memberId: string; memberName: string; phone: string }[];
 }
+
+export interface PenaltyTopupPayload {
+  groupId: string;
+  memberId: string;
+  operator?: 'Orange Money' | 'MTN MoMo' | 'Wave' | string;
+  phoneNumber?: string;
+  notes?: string;
+}
+
+export interface PenaltyTopupResult {
+  success: boolean;
+  message: string;
+  groupId: string;
+  groupName: string;
+  roundNumber: number;
+  memberId: string;
+  memberName: string;
+  missingContribution: number;
+  customPenaltyAmount: number;
+  totalPaid: number;
+  saasPenaltyShare: number; // 50%
+  beneficiaryPenaltyShare: number; // 50%
+  beneficiaryId: string;
+  beneficiaryName: string;
+  beneficiaryPhone: string;
+  memberNewStatus: 'ACTIVE';
+  guaranteeBalance: number;
+  transactionRef: string;
+  receiptNumber: string;
+  simulatedPayoutCall: {
+    provider: string;
+    recipientPhone: string;
+    amountSent: number;
+    description: string;
+    status: string;
+    gatewayRef: string;
+    timestamp: string;
+  };
+}
+

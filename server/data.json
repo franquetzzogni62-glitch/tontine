@@ -205,8 +205,10 @@
         {
           "memberId": "mem_2",
           "turnOrder": 2,
-          "hasPaidToday": false,
-          "totalContributedInGroup": 6600
+          "hasPaidToday": true,
+          "totalContributedInGroup": 7700,
+          "status": "ACTIVE",
+          "guaranteeBalance": 1100
         },
         {
           "memberId": "mem_3",
@@ -963,13 +965,14 @@
       "phone": "+237 6 75 12 34 56",
       "email": "amadou.bello@gmail.com",
       "city": "Garoua",
-      "trustScore": 96,
+      "trustScore": 99,
       "joinedDate": "2026-02-01",
       "groupsCount": 2,
-      "totalContributed": 220000,
+      "totalContributed": 221100,
       "totalReceived": 200000,
       "status": "active",
-      "notes": "Commerçant de bétail et céréales."
+      "notes": "Commerçant de bétail et céréales.",
+      "guaranteeBalance": 1100
     },
     {
       "id": "mem_3",
@@ -1209,6 +1212,24 @@
     }
   ],
   "payments": [
+    {
+      "id": "tx_pen_1790682342138",
+      "groupId": "grp_1",
+      "groupName": "Tontine Mélanie - Express Akwa",
+      "memberId": "mem_2",
+      "memberName": "Amadou Bello",
+      "memberPhone": "+237 6 75 12 34 56",
+      "amount": 2100,
+      "baseAmount": 1100,
+      "commission": 500,
+      "date": "2026-09-29T11:45:42.138Z",
+      "status": "paid",
+      "method": "Orange Money Régularisation Retard",
+      "transactionRef": "PEN-TOPUP-MUMM1626-6009",
+      "receiptNumber": "REC-PEN-TOPUP-MUMM1626-6009",
+      "verifiedByModerator": true,
+      "roundNumber": 7
+    },
     {
       "id": "tx_1790643969845_383",
       "groupId": "grp_1",
@@ -3375,6 +3396,22 @@
   ],
   "notifications": [
     {
+      "title": "✅ Régularisation réussie : Amadou Bello",
+      "message": "Amadou Bello a régularisé son retard avec paiement de 2,100 FCFA (1,100 FCFA de caution restaurée + 1,000 FCFA de pénalité). Statut rétabli en ACTIVE.",
+      "type": "payment",
+      "id": "notif_1790682342139_li8z",
+      "timestamp": "2026-09-29T11:45:42.139Z",
+      "read": false
+    },
+    {
+      "title": "💰 Dédommagement retard reçu : 500 FCFA",
+      "message": "Samuel Eto'o Mbida, vous venez de recevoir 500 FCFA sur votre compte Orange Money (+237 6 79 00 11 22), représentant 50% de la pénalité de retard payée par Amadou Bello sur la tontine Tontine Mélanie - Express Akwa.",
+      "type": "payout",
+      "id": "notif_1790682342138_xtdi",
+      "timestamp": "2026-09-29T11:45:42.138Z",
+      "read": false
+    },
+    {
       "title": "Nouveau tour #7 ouvert : Tontine Mélanie - Express Akwa",
       "message": "C'est au tour de Samuel Eto'o Mbida de recevoir le prochain pot (10,500 FCFA).",
       "type": "round",
@@ -3446,5 +3483,6 @@
       "read": true,
       "type": "system"
     }
-  ]
+  ],
+  "payouts": []
 }

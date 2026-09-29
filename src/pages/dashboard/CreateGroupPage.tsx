@@ -40,9 +40,10 @@ export const CreateGroupPage: React.FC = () => {
   const [frequency, setFrequency] = useState<Frequency>('daily');
   const [category, setCategory] = useState('Commerce & Négoce');
 
-  // Step 2: Commission modérateur
+  // Step 2: Commission modérateur & Pénalités
   const [commissionType, setCommissionType] = useState<'fixed' | 'percentage'>('fixed');
   const [commissionValue, setCommissionValue] = useState(50); // 50 FCFA
+  const [customPenaltyAmount, setCustomPenaltyAmount] = useState(1000); // 1 000 FCFA par défaut
 
   // Step 3: Nombre de membres & Ordre des tours
   const [selectedMembers, setSelectedMembers] = useState<
@@ -138,6 +139,7 @@ export const CreateGroupPage: React.FC = () => {
       moderatorId: currentUser.id,
       contributionAmount: Number(contributionAmount),
       moderatorCommission: calculatedCommission,
+      customPenaltyAmount: Number(customPenaltyAmount) || 1000,
       commissionType,
       frequency,
       currency: 'FCFA',
@@ -363,6 +365,44 @@ export const CreateGroupPage: React.FC = () => {
               onChange={(e) => setCommissionValue(Number(e.target.value))}
               required
             />
+
+            {/* Configuration Pénalité de Retard */}
+            <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-3">
+              <Input
+                label="Montant de la pénalité de retard (FCFA)"
+                type="number"
+                value={customPenaltyAmount}
+                onChange={(e) => setCustomPenaltyAmount(Number(e.target.value))}
+                placeholder="Ex: 1000"
+                helperText="Montant forfaitaire appliqué lorsqu'un membre manque l'échéance de tirage."
+                required
+              />
+
+              {/* Mention obligatoire et répartition 50/50 */}
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 space-y-2">
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-800 dark:text-amber-300">
+                  <ShieldCheck size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
+                  <span>Règle de gestion des pénalités (Répartition 50/50) :</span>
+                </div>
+                <p className="text-xs font-semibold leading-relaxed text-amber-800 dark:text-amber-300">
+                  « En cas de retard, les pénalités collectées sont partagées à 50% pour le bénéficiaire lésé et 50% pour la gestion de la plateforme. »
+                </p>
+                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] font-mono border-t border-amber-500/20">
+                  <div className="p-2 rounded-lg bg-white/60 dark:bg-slate-900/60 border border-amber-500/20">
+                    <span className="text-slate-500 dark:text-slate-400 block">Part Bénéficiaire lésé (50%) :</span>
+                    <strong className="text-emerald-600 dark:text-emerald-400 text-xs">
+                      {formatFCFA(Math.round(customPenaltyAmount * 0.5))}
+                    </strong>
+                  </div>
+                  <div className="p-2 rounded-lg bg-white/60 dark:bg-slate-900/60 border border-amber-500/20">
+                    <span className="text-slate-500 dark:text-slate-400 block">Part Gestion SaaS (50%) :</span>
+                    <strong className="text-amber-700 dark:text-amber-400 text-xs">
+                      {formatFCFA(customPenaltyAmount - Math.round(customPenaltyAmount * 0.5))}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Simulation Box */}
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">

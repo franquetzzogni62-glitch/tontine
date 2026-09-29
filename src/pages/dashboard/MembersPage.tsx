@@ -30,11 +30,14 @@ export const MembersPage: React.FC = () => {
 
   // Filter members
   const filteredMembers = members.filter((m) => {
+    const isDepleted = m.status === 'GUARANTEE_DEPLETED' || (m.status as string) === 'guarantee_depleted';
     const matchesFilter =
       filter === 'all'
         ? true
         : filter === 'active'
         ? m.status === 'active'
+        : filter === 'depleted'
+        ? isDepleted
         : filter === 'inactive'
         ? m.status === 'inactive'
         : true;
@@ -81,6 +84,11 @@ export const MembersPage: React.FC = () => {
   const filterTabs = [
     { id: 'all', label: 'Tous les membres', count: members.length },
     { id: 'active', label: 'Actifs', count: members.filter((m) => m.status === 'active').length },
+    {
+      id: 'depleted',
+      label: 'Cautions Épuisées',
+      count: members.filter((m) => m.status === 'GUARANTEE_DEPLETED' || (m.status as string) === 'guarantee_depleted').length,
+    },
     { id: 'inactive', label: 'Inactifs', count: members.filter((m) => m.status === 'inactive').length },
   ];
 
@@ -181,9 +189,15 @@ export const MembersPage: React.FC = () => {
                   </td>
 
                   <td className="py-3 px-3 text-center">
-                    <Badge variant={member.status === 'active' ? 'success' : 'danger'}>
-                      {member.status === 'active' ? 'Actif' : 'Inactif'}
-                    </Badge>
+                    {member.status === 'GUARANTEE_DEPLETED' || (member.status as string) === 'guarantee_depleted' ? (
+                      <Badge variant="danger">
+                        Caution Épuisée
+                      </Badge>
+                    ) : (
+                      <Badge variant={member.status === 'active' ? 'success' : 'danger'}>
+                        {member.status === 'active' ? 'Actif' : 'Inactif'}
+                      </Badge>
+                    )}
                   </td>
 
                   <td className="py-3 px-3 text-right">

@@ -217,9 +217,33 @@ const handleVerifyMemberPresence = (req: Request, res: Response) => {
   }
 };
 
-// Direct routes required for 5% SaaS commission:
+// Late Penalty Regularization & Caution Top-up (50% SaaS / 50% Beneficiary)
+const handlePayPenaltyAndTopup = (req: Request, res: Response) => {
+  try {
+    const { groupId, memberId, operator, phoneNumber, notes } = req.body;
+    if (!groupId || !memberId) {
+      return res.status(400).json({ error: 'Les champs groupId et memberId sont obligatoires.' });
+    }
+
+    const result = db.payPenaltyAndTopup({
+      groupId,
+      memberId,
+      operator: operator || 'Orange Money',
+      phoneNumber,
+      notes,
+    });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erreur lors de la régularisation du retard et de la pénalité.' });
+  }
+};
+
+// Direct routes required:
 apiRouter.post('/tontine/payout', handleProcessTontinePayout);
 apiRouter.get('/tontine/summary/:groupId', handleGetTontineSummary);
+apiRouter.post('/tontine/pay-penalty-and-topup', handlePayPenaltyAndTopup);
+apiRouter.post('/tontines/pay-penalty-and-topup', handlePayPenaltyAndTopup);
 
 // Bind /tontines
 apiRouter.get('/tontines', handleGetGroups);

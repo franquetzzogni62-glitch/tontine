@@ -4,6 +4,8 @@ import {
   PaymentTransaction,
   PayoutTransaction,
   TontineFinancialSummary,
+  PenaltyTopupPayload,
+  PenaltyTopupResult,
   AppNotification,
   User,
   KycStatus,
@@ -163,6 +165,19 @@ export const api = {
       body: JSON.stringify({ groupId, ...(options || {}) }),
     });
     return handleResponse(res);
+  },
+
+  /**
+   * Régularise le retard d'un membre avec top-up caution et ventilation 50/50 de la pénalité
+   * Route requise: POST /api/tontine/pay-penalty-and-topup
+   */
+  async payPenaltyAndTopup(payload: PenaltyTopupPayload): Promise<PenaltyTopupResult> {
+    const res = await fetch(`${BASE_URL}/tontine/pay-penalty-and-topup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse<PenaltyTopupResult>(res);
   },
 
   async advanceGroupRound(id: string): Promise<{ success: boolean; group: TontineGroup }> {

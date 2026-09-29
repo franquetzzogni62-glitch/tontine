@@ -5,7 +5,7 @@ import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { formatFCFA, formatDate } from '../../utils/formatters';
-import { Phone, Mail, MapPin, Calendar, Award, MessageSquare } from 'lucide-react';
+import { Phone, Mail, MapPin, Calendar, Award, MessageSquare, ShieldCheck, AlertTriangle } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface MemberDetailsModalProps {
@@ -34,6 +34,8 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
     addToast('Rappel envoyé', `Un SMS de relance a été envoyé à ${member.name}.`, 'info');
   };
 
+  const isGuaranteeDepleted = member.status === 'GUARANTEE_DEPLETED' || (member.status as string) === 'guarantee_depleted';
+
   return (
     <Modal
       isOpen={isOpen}
@@ -54,9 +56,15 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
               <h3 className="text-base font-bold text-slate-900 dark:text-white">
                 {member.name}
               </h3>
-              <Badge variant={member.status === 'active' ? 'success' : 'danger'}>
-                {member.status === 'active' ? 'Actif' : 'Inactif'}
-              </Badge>
+              {isGuaranteeDepleted ? (
+                <Badge variant="danger">
+                  Caution Épuisée
+                </Badge>
+              ) : (
+                <Badge variant={member.status === 'active' ? 'success' : 'danger'}>
+                  {member.status === 'active' ? 'Actif' : 'Inactif'}
+                </Badge>
+              )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 flex items-center gap-1.5">
               <MapPin size={13} /> {member.city} · Membre depuis le {formatDate(member.joinedDate)}
@@ -64,28 +72,48 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
           </div>
         </div>
 
-        {/* Trust Score & Stats */}
-        <div className="grid grid-cols-3 gap-3">
+        {/* Depleted Guarantee Warning */}
+        {isGuaranteeDepleted && (
+          <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-900 dark:text-rose-200 text-xs space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-rose-700 dark:text-rose-400">
+              <AlertTriangle size={16} />
+              <span>Dépôt de garantie épuisé (Retard non régularisé)</span>
+            </div>
+            <p className="text-[11px] leading-relaxed text-slate-700 dark:text-slate-300">
+              La caution de ce membre a été prélevée suite à une défaillance. Pour réactiver son statut en <strong>ACTIVE</strong>, le membre doit verser la cotisation manquante (recharge caution) majorée de la <strong>pénalité de retard</strong> définie par l'administrateur.
+            </p>
+          </div>
+        )}
+
+        {/* Trust Score & Financial Stats */}
+        <div className="grid grid-cols-4 gap-2">
           <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-center">
-            <span className="text-[11px] text-slate-500 block mb-1">Score Confiance</span>
+            <span className="text-[10px] text-slate-500 block mb-1">Score Confiance</span>
             <div className="flex items-center justify-center gap-1">
-              <Award className="w-4 h-4 text-emerald-500" />
-              <span className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
+              <Award className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
                 {member.trustScore}%
               </span>
             </div>
           </div>
 
           <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-center">
-            <span className="text-[11px] text-slate-500 block mb-1">Total Cotisé</span>
-            <span className="text-sm font-bold font-mono text-slate-900 dark:text-white block mt-0.5">
+            <span className="text-[10px] text-slate-500 block mb-1">Caution Dispo</span>
+            <span className={`text-xs font-bold font-mono block mt-0.5 ${isGuaranteeDepleted ? 'text-rose-600' : 'text-emerald-600'}`}>
+              {formatFCFA(member.guaranteeBalance ?? 0)}
+            </span>
+          </div>
+
+          <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-center">
+            <span className="text-[10px] text-slate-500 block mb-1">Total Cotisé</span>
+            <span className="text-xs font-bold font-mono text-slate-900 dark:text-white block mt-0.5">
               {formatFCFA(member.totalContributed)}
             </span>
           </div>
 
           <div className="p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-center">
-            <span className="text-[11px] text-slate-500 block mb-1">Groupes Actifs</span>
-            <span className="text-lg font-bold font-mono text-slate-900 dark:text-white block">
+            <span className="text-[10px] text-slate-500 block mb-1">Groupes</span>
+            <span className="text-base font-bold font-mono text-slate-900 dark:text-white block">
               {member.groupsCount}
             </span>
           </div>

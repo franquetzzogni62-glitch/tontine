@@ -298,14 +298,16 @@ const RAW_MEMBERS = [
   },
 ];
 
-export const MOCK_MEMBERS: Member[] = RAW_MEMBERS.map((m) => {
+export const MOCK_MEMBERS: Member[] = RAW_MEMBERS.map((m, idx) => {
   const parts = m.name.split(' ');
   const firstName = parts[0] || m.name;
   const lastName = parts.slice(1).join(' ') || '';
   const kycStatus = (m.trustScore >= 92 ? 'verified' : m.trustScore >= 80 ? 'pending' : 'unverified') as any;
+  const isDepleted = idx === 4; // Sample member with GUARANTEE_DEPLETED for penalty testing
   return {
     ...m,
-    status: m.status as any,
+    status: isDepleted ? 'GUARANTEE_DEPLETED' : (m.status as any),
+    guaranteeBalance: isDepleted ? 0 : 50000,
     firstName,
     lastName,
     kycStatus,
@@ -548,6 +550,7 @@ export const MOCK_GROUPS: TontineGroup[] = RAW_GROUPS.map((g) => {
   const potAmount = (g.contributionAmount - g.moderatorCommission) * g.totalMembersCount;
   return {
     ...g,
+    customPenaltyAmount: 1000,
     commissionType: g.commissionType as 'fixed' | 'percentage',
     frequency: g.frequency as any,
     status: g.status as any,

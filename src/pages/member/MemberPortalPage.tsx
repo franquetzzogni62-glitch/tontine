@@ -9,7 +9,8 @@ import { Avatar } from '../../components/ui/Avatar';
 import { MemberPayModal } from '../../components/modals/MemberPayModal';
 import { ReceiptModal } from '../../components/modals/ReceiptModal';
 import { WebhookSimulatorModal } from '../../components/modals/WebhookSimulatorModal';
-import { TontineGroup, PaymentTransaction } from '../../types';
+import { RegularizePenaltyModal } from '../../components/modals/RegularizePenaltyModal';
+import { TontineGroup, PaymentTransaction, Member } from '../../types';
 import {
   Sparkles,
   Smartphone,
@@ -33,10 +34,12 @@ import {
 import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
 
 export const MemberPortalPage: React.FC = () => {
-  const { currentUser, switchRole, groups, payments, theme, toggleTheme } = useApp();
+  const { currentUser, switchRole, groups, members, payments, theme, toggleTheme } = useApp();
 
   const [selectedGroupToPay, setSelectedGroupToPay] = useState<TontineGroup | null>(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [penaltyModalOpen, setPenaltyModalOpen] = useState(false);
+  const [selectedGroupForPenalty, setSelectedGroupForPenalty] = useState<TontineGroup | null>(null);
   const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<PaymentTransaction | null>(null);
@@ -85,6 +88,9 @@ export const MemberPortalPage: React.FC = () => {
     (p) => p.memberId === currentUser.id || p.memberId === 'mem_2'
   );
 
+  const currentMember = members.find((m) => m.id === currentUser.id || m.id === 'mem_2') || members[0];
+  const isGuaranteeDepleted = currentMember?.status === 'GUARANTEE_DEPLETED' || (currentMember?.status as string) === 'guarantee_depleted';
+
   const totalIContributed = myPayments
     .filter((p) => p.status === 'paid')
     .reduce((acc, p) => acc + p.amount, 0);
@@ -92,6 +98,11 @@ export const MemberPortalPage: React.FC = () => {
   const handleOpenPay = (group: TontineGroup) => {
     setSelectedGroupToPay(group);
     setPayModalOpen(true);
+  };
+
+  const handleOpenPenalty = (group: TontineGroup) => {
+    setSelectedGroupForPenalty(group);
+    setPenaltyModalOpen(true);
   };
 
   const handleOpenReceipt = (tx: PaymentTransaction) => {
@@ -249,6 +260,31 @@ export const MemberPortalPage: React.FC = () => {
         </div>
 
         {/* ========================================================================= */}
+        {/* BANNER RETARD & CAUTION ÉPUISÉE SI APPLICABLE */}
+        {/* ========================================================================= */}
+        {isGuaranteeDepleted && (
+          <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-500/30 text-rose-900 dark:text-rose-200 space-y-2.5">
+            <div className="flex items-center gap-2 font-bold text-sm text-rose-700 dark:text-rose-300">
+              <AlertCircle size={18} className="shrink-0" />
+              <span>Votre dépôt de garantie est épuisé (Statut : Caution Épuisée)</span>
+            </div>
+            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+              Pour débloquer vos tours et réactiver votre compte en statut <strong>ACTIVE</strong>, vous devez régulariser votre cotisation manquante majorée de la <strong>pénalité de retard</strong> fixée par l'administrateur. Les pénalités collectées sont réparties automatiquement à <strong>50% pour le bénéficiaire lésé</strong> et <strong>50% pour la plateforme SaaS</strong>.
+            </p>
+            <div className="pt-1 flex items-center gap-2">
+              <Button
+                variant="emerald"
+                size="sm"
+                onClick={() => handleOpenPenalty(displayGroups[0])}
+                leftIcon={<ShieldCheck size={15} />}
+              >
+                Régulariser mon retard (Top-up & Pénalité)
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
         {/* MES COTISATIONS EN COURS (Action Cards avec Bouton Payer) */}
         {/* ========================================================================= */}
         <div className="space-y-3">
@@ -266,6 +302,7 @@ export const MemberPortalPage: React.FC = () => {
               (m) => m.memberId === currentUser.id || m.memberId === 'mem_2'
             );
             const hasPaid = memberRecord?.hasPaidToday ?? false;
+            const isMemberDepleted = memberRecord?.status === 'GUARANTEE_DEPLETED' || isGuaranteeDepleted;
 
             return (
               <Card key={group.id} className="p-4 space-y-3">
@@ -279,8 +316,8 @@ export const MemberPortalPage: React.FC = () => {
                     </p>
                   </div>
 
-                  <Badge variant={hasPaid ? 'success' : 'warning'}>
-                    {hasPaid ? 'À jour' : 'Cotisation due'}
+                  <Badge variant={hasPaid ? 'success' : isMemberDepleted ? 'danger' : 'warning'}>
+                    {hasPaid ? 'À jour' : isMemberDepleted ? 'Caution épuisée' : 'Cotisation due'}
                   </Badge>
                 </div>
 
@@ -293,14 +330,25 @@ export const MemberPortalPage: React.FC = () => {
                   </div>
 
                   {!hasPaid ? (
-                    <Button
-                      variant="emerald"
-                      size="sm"
-                      onClick={() => handleOpenPay(group)}
-                      leftIcon={<Smartphone size={15} />}
-                    >
-                      Payer ma cotisation
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="emerald"
+                        size="sm"
+                        onClick={() => handleOpenPay(group)}
+                        leftIcon={<Smartphone size={15} />}
+                      >
+                        Payer
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-amber-700 dark:text-amber-300 border-amber-500/40 text-[11px]"
+                        onClick={() => handleOpenPenalty(group)}
+                        title="Régulariser avec pénalité 50/50"
+                      >
+                        Pénalité ({formatFCFA(group.customPenaltyAmount || 1000)})
+                      </Button>
+                    </div>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
                       <CheckCircle2 size={16} /> Versement validé
@@ -415,6 +463,19 @@ export const MemberPortalPage: React.FC = () => {
         }}
         transaction={selectedTxForReceipt}
       />
+
+      {/* Regularize Penalty Modal */}
+      {selectedGroupForPenalty && (
+        <RegularizePenaltyModal
+          isOpen={penaltyModalOpen}
+          onClose={() => {
+            setPenaltyModalOpen(false);
+            setSelectedGroupForPenalty(null);
+          }}
+          group={selectedGroupForPenalty}
+          member={currentMember}
+        />
+      )}
     </div>
   );
 };

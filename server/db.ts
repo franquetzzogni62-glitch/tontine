@@ -7,6 +7,8 @@ import {
   PaymentTransaction,
   PayoutTransaction,
   TontineFinancialSummary,
+  PenaltyTopupPayload,
+  PenaltyTopupResult,
   AppNotification,
   BeneficiaryTurn,
   KycStatus,
@@ -171,6 +173,7 @@ class DatabaseService {
       const potAmount = (g.contributionAmount - g.moderatorCommission) * g.totalMembersCount;
       return {
         ...g,
+        customPenaltyAmount: g.customPenaltyAmount ?? 1000,
         nextTurnDate,
         potAmount: g.potAmount || potAmount,
       };
@@ -184,6 +187,7 @@ class DatabaseService {
     const potAmount = (g.contributionAmount - g.moderatorCommission) * g.totalMembersCount;
     return {
       ...g,
+      customPenaltyAmount: g.customPenaltyAmount ?? 1000,
       nextTurnDate,
       potAmount: g.potAmount || potAmount,
     };
@@ -199,6 +203,7 @@ class DatabaseService {
       id: newId,
       potAmount,
       nextTurnDate,
+      customPenaltyAmount: Number(groupData.customPenaltyAmount) || 1000,
       type: groupData.type || 'rotative',
     };
     this.data.groups.unshift(newGroup);
@@ -537,6 +542,159 @@ class DatabaseService {
     };
   }
 
+
+  // --- Logic: Pay Late Penalty and Guarantee Top-up (50/50 Split) ---
+  payPenaltyAndTopup(payload: {
+    groupId: string;
+    memberId: string;
+    operator?: string;
+    phoneNumber?: string;
+    notes?: string;
+  }): PenaltyTopupResult {
+    const group = this.getGroupById(payload.groupId);
+    if (!group) {
+      throw new Error('Groupe de tontine non trouvé.');
+    }
+
+    const member = this.getMemberById(payload.memberId);
+    if (!member) {
+      throw new Error('Membre non trouvé.');
+    }
+
+    const groupMember = group.members.find((m) => m.memberId === payload.memberId);
+    if (!groupMember) {
+      throw new Error('Ce membre ne fait pas partie de ce groupe de tontine.');
+    }
+
+    // Calculs financiers
+    const missingContribution = group.contributionAmount;
+    const customPenaltyAmount = group.customPenaltyAmount || 1000;
+    const totalPaid = missingContribution + customPenaltyAmount;
+
+    // Ventilation automatique 50% SaaS / 50% Bénéficiaire
+    const saasPenaltyShare = Math.round(customPenaltyAmount * 0.5);
+    const beneficiaryPenaltyShare = customPenaltyAmount - saasPenaltyShare;
+
+    // Bénéficiaire du tour impacté
+    const roundNumber = group.currentDay;
+    const beneficiaryTurn =
+      group.beneficiarySchedule.find((b) => b.order === roundNumber) ||
+      group.beneficiarySchedule[0];
+    const beneficiaryMember = beneficiaryTurn
+      ? this.getMemberById(beneficiaryTurn.memberId)
+      : undefined;
+
+    const beneficiaryId = beneficiaryTurn?.memberId || 'ben_unknown';
+    const beneficiaryName =
+      beneficiaryTurn?.memberName || beneficiaryMember?.name || 'Bénéficiaire du Tour';
+    const beneficiaryPhone =
+      beneficiaryTurn?.memberPhone || beneficiaryMember?.phone || '+237 6 00 00 00 00';
+
+    const operator = payload.operator || 'Orange Money';
+    const txRef = `PEN-TOPUP-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const payoutGatewayRef = `GW-PEN-BEN-${Math.floor(100000 + Math.random() * 900000)}`;
+
+    // 1. Réapprovisionner la caution du membre (guaranteeBalance)
+    const currentGuarantee = member.guaranteeBalance || 0;
+    const newGuaranteeBalance = currentGuarantee + missingContribution;
+
+    // 2. Mettre à jour le statut du membre de GUARANTEE_DEPLETED vers ACTIVE
+    this.updateMember(member.id, {
+      status: 'active',
+      guaranteeBalance: newGuaranteeBalance,
+      trustScore: Math.min(100, (member.trustScore || 85) + 3), // Bonus de régularisation
+      totalContributed: (member.totalContributed || 0) + missingContribution,
+    });
+
+    // Mettre à jour dans le groupe
+    const updatedMembers = group.members.map((m) => {
+      if (m.memberId === member.id) {
+        return {
+          ...m,
+          hasPaidToday: true,
+          status: 'ACTIVE' as const,
+          guaranteeBalance: newGuaranteeBalance,
+          totalContributedInGroup: (m.totalContributedInGroup || 0) + missingContribution,
+        };
+      }
+      return m;
+    });
+
+    this.updateGroup(group.id, { members: updatedMembers });
+
+    // 3. Simuler le versement (Payout) automatique des 50% de pénalité vers le Mobile Money du bénéficiaire
+    const simulatedPayoutCall = {
+      provider: operator,
+      recipientPhone: beneficiaryPhone,
+      amountSent: beneficiaryPenaltyShare,
+      description: `Dédommagement retard (50% de pénalité de ${customPenaltyAmount.toLocaleString()} FCFA) régularisé par ${member.name} pour le Tour #${roundNumber}`,
+      currency: 'XAF',
+      status: 'SUCCESS',
+      gatewayRef: payoutGatewayRef,
+      timestamp: new Date().toISOString(),
+    };
+
+    // 4. Enregistrer la transaction globale dans le compte de la plateforme
+    const receiptNumber = `REC-${txRef}`;
+    this.data.payments.unshift({
+      id: `tx_pen_${Date.now()}`,
+      groupId: group.id,
+      groupName: group.name,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: payload.phoneNumber || member.phone,
+      amount: totalPaid,
+      baseAmount: missingContribution,
+      commission: saasPenaltyShare, // Part de revenu 50% conservée par le SaaS
+      date: new Date().toISOString(),
+      status: 'paid',
+      method: `${operator} Régularisation Retard`,
+      transactionRef: txRef,
+      receiptNumber,
+      verifiedByModerator: true,
+      roundNumber,
+    });
+
+    // 5. Notifications
+    // Notification pour le bénéficiaire dédommagé
+    this.createNotification({
+      title: `💰 Dédommagement retard reçu : ${beneficiaryPenaltyShare.toLocaleString()} FCFA`,
+      message: `${beneficiaryName}, vous venez de recevoir ${beneficiaryPenaltyShare.toLocaleString()} FCFA sur votre compte ${operator} (${beneficiaryPhone}), représentant 50% de la pénalité de retard payée par ${member.name} sur la tontine ${group.name}.`,
+      type: 'payout',
+    });
+
+    // Notification générale pour le groupe
+    this.createNotification({
+      title: `✅ Régularisation réussie : ${member.name}`,
+      message: `${member.name} a régularisé son retard avec paiement de ${totalPaid.toLocaleString()} FCFA (${missingContribution.toLocaleString()} FCFA de caution restaurée + ${customPenaltyAmount.toLocaleString()} FCFA de pénalité). Statut rétabli en ACTIVE.`,
+      type: 'payment',
+    });
+
+    this.persist();
+
+    return {
+      success: true,
+      message: `Régularisation effectuée avec succès ! ${totalPaid.toLocaleString()} FCFA encaissés. Caution restaurée à ${newGuaranteeBalance.toLocaleString()} FCFA, ${beneficiaryPenaltyShare.toLocaleString()} FCFA versés au bénéficiaire (${beneficiaryName}) et ${saasPenaltyShare.toLocaleString()} FCFA alloués aux revenus SaaS.`,
+      groupId: group.id,
+      groupName: group.name,
+      roundNumber,
+      memberId: member.id,
+      memberName: member.name,
+      missingContribution,
+      customPenaltyAmount,
+      totalPaid,
+      saasPenaltyShare,
+      beneficiaryPenaltyShare,
+      beneficiaryId,
+      beneficiaryName,
+      beneficiaryPhone,
+      memberNewStatus: 'ACTIVE',
+      guaranteeBalance: newGuaranteeBalance,
+      transactionRef: txRef,
+      receiptNumber,
+      simulatedPayoutCall,
+    };
+  }
 
   // --- Logic: Reorder Turns ---
   reorderTurns(groupId: string, newTurnOrders: { memberId: string; order: number }[]): TontineGroup {
@@ -948,3 +1106,8 @@ export function processTontinePayout(
 export function getTontineSummary(groupId: string) {
   return db.getTontineSummary(groupId);
 }
+
+export function payPenaltyAndTopup(payload: PenaltyTopupPayload) {
+  return db.payPenaltyAndTopup(payload);
+}
+

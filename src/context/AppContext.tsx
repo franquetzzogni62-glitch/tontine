@@ -9,6 +9,8 @@ import {
   UserRole,
   KycStatus,
   WebhookSimulationPayload,
+  PenaltyTopupPayload,
+  PenaltyTopupResult,
 } from '../types';
 import {
   CURRENT_MODERATOR,
@@ -37,6 +39,7 @@ interface AppContextType {
   payoutPot: (groupId: string, force?: boolean, notes?: string) => Promise<any>;
   reorderTurns: (groupId: string, turns: { memberId: string; order: number }[]) => Promise<void>;
   verifyMemberPresence: (groupId: string, memberId: string, validated?: boolean) => Promise<void>;
+  payPenaltyAndTopup: (payload: PenaltyTopupPayload) => Promise<PenaltyTopupResult>;
 
   members: Member[];
   addMember: (member: Omit<Member, 'id'>) => Promise<Member>;
@@ -353,6 +356,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Penalty top-up and regularization with 50/50 split
+  const payPenaltyAndTopup = async (payload: PenaltyTopupPayload): Promise<PenaltyTopupResult> => {
+    try {
+      const res = await api.payPenaltyAndTopup(payload);
+      await refreshData();
+      addToast(
+        'Régularisation effectuée !',
+        `${res.totalPaid.toLocaleString()} FCFA encaissés. Statut de ${res.memberName} rétabli en ACTIVE. ${res.beneficiaryPenaltyShare.toLocaleString()} FCFA reversés au bénéficiaire (50%).`,
+        'success'
+      );
+      return res;
+    } catch (err: any) {
+      addToast('Erreur régularisation', err.message || 'Échec du traitement de la pénalité', 'error');
+      throw err;
+    }
+  };
+
   // Member methods connected to Backend API
   const addMember = async (memberData: Omit<Member, 'id'>): Promise<Member> => {
     try {
@@ -542,6 +562,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         payoutPot,
         reorderTurns,
         verifyMemberPresence,
+        payPenaltyAndTopup,
         members,
         addMember,
         updateMember,

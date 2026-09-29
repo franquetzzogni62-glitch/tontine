@@ -14,7 +14,8 @@ import { PayoutPotModal } from '../../components/modals/PayoutPotModal';
 import { WebhookSimulatorModal } from '../../components/modals/WebhookSimulatorModal';
 import { ReceiptModal } from '../../components/modals/ReceiptModal';
 import { FinancialSummaryWidget } from '../../components/FinancialSummaryWidget';
-import { PaymentTransaction } from '../../types';
+import { RegularizePenaltyModal } from '../../components/modals/RegularizePenaltyModal';
+import { PaymentTransaction, Member } from '../../types';
 import {
   ArrowLeft,
   Users2,
@@ -66,6 +67,8 @@ export const GroupDetailPage: React.FC = () => {
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
   const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [regularizeModalOpen, setRegularizeModalOpen] = useState(false);
+  const [selectedMemberForPenalty, setSelectedMemberForPenalty] = useState<Member | undefined>(undefined);
   const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<PaymentTransaction | null>(null);
   const [selectedMemberForPayment, setSelectedMemberForPayment] = useState<string | undefined>(undefined);
 
@@ -502,8 +505,13 @@ export const GroupDetailPage: React.FC = () => {
                           <Avatar name={memberInfo?.name || 'Membre'} size="sm" />
                           <div>
                             <span className="font-bold block">{memberInfo?.name}</span>
+                            {memberInfo?.status === 'GUARANTEE_DEPLETED' && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/30 inline-block mt-0.5">
+                                Caution Épuisée
+                              </span>
+                            )}
                             {isCurrentTourBeneficiary && (
-                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold block">
                                 <Sparkles size={11} /> Bénéficiaire du tour
                               </span>
                             )}
@@ -557,6 +565,21 @@ export const GroupDetailPage: React.FC = () => {
                                 }
                               >
                                 Valider versement
+                              </Button>
+
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10 text-[11px]"
+                                onClick={() => {
+                                  if (memberInfo) {
+                                    setSelectedMemberForPenalty(memberInfo);
+                                    setRegularizeModalOpen(true);
+                                  }
+                                }}
+                                title="Régulariser retard et pénalité (50% SaaS / 50% Bénéficiaire)"
+                              >
+                                Pénalité ({formatFCFA(group.customPenaltyAmount || 1000)})
                               </Button>
 
                               <Button
@@ -893,6 +916,16 @@ export const GroupDetailPage: React.FC = () => {
           setSelectedTxForReceipt(null);
         }}
         transaction={selectedTxForReceipt}
+      />
+
+      <RegularizePenaltyModal
+        isOpen={regularizeModalOpen}
+        onClose={() => {
+          setRegularizeModalOpen(false);
+          setSelectedMemberForPenalty(undefined);
+        }}
+        group={group}
+        member={selectedMemberForPenalty}
       />
     </div>
   );
