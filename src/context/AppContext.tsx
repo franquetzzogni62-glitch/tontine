@@ -28,6 +28,7 @@ interface AppContextType {
   currentUser: User;
   switchRole: (role: UserRole) => void;
   setCurrentUser: (user: User) => void;
+  logout: () => void;
   updateUserKyc: (userId: string, kycStatus: KycStatus) => Promise<void>;
   updateUserTrustScore: (userId: string, trustScore: number) => Promise<void>;
 
