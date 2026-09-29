@@ -64,6 +64,14 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
+const PROD_VERSION_KEY = 'tontiflow_prod_v2_clean';
+if (typeof window !== 'undefined' && localStorage.getItem('tontiflow_app_version') !== PROD_VERSION_KEY) {
+  localStorage.removeItem('tontiflow_groups');
+  localStorage.removeItem('tontiflow_members');
+  localStorage.removeItem('tontiflow_payments');
+  localStorage.setItem('tontiflow_app_version', PROD_VERSION_KEY);
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Theme state
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -92,23 +100,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Groups state
   const [groups, setGroups] = useState<TontineGroup[]>(() => {
     const saved = localStorage.getItem('tontiflow_groups');
-    return saved ? JSON.parse(saved) : MOCK_GROUPS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Members state
   const [members, setMembers] = useState<Member[]>(() => {
     const saved = localStorage.getItem('tontiflow_members');
-    return saved ? JSON.parse(saved) : MOCK_MEMBERS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Payments state
   const [payments, setPayments] = useState<PaymentTransaction[]>(() => {
     const saved = localStorage.getItem('tontiflow_payments');
-    return saved ? JSON.parse(saved) : generateMockTransactions();
+    return saved ? JSON.parse(saved) : [];
   });
 
   // Notifications state
-  const [notifications, setNotifications] = useState<AppNotification[]>(MOCK_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   // Toasts state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -139,19 +147,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         api.getNotifications(),
       ]);
 
-      if (fetchedGroups && fetchedGroups.length > 0) {
+      if (Array.isArray(fetchedGroups)) {
         setGroups(fetchedGroups);
         localStorage.setItem('tontiflow_groups', JSON.stringify(fetchedGroups));
       }
-      if (fetchedMembers && fetchedMembers.length > 0) {
+      if (Array.isArray(fetchedMembers)) {
         setMembers(fetchedMembers);
         localStorage.setItem('tontiflow_members', JSON.stringify(fetchedMembers));
       }
-      if (fetchedPayments && fetchedPayments.length > 0) {
+      if (Array.isArray(fetchedPayments)) {
         setPayments(fetchedPayments);
         localStorage.setItem('tontiflow_payments', JSON.stringify(fetchedPayments));
       }
-      if (fetchedNotifications && fetchedNotifications.length > 0) {
+      if (Array.isArray(fetchedNotifications)) {
         setNotifications(fetchedNotifications);
       }
       setIsBackendConnected(true);

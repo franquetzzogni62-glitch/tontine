@@ -81,14 +81,14 @@ class DatabaseService {
       console.warn('Failed reading existing database file, re-seeding:', err);
     }
 
-    // Seed data
+    // Production clean initial data
     const initialData: DatabaseSchema = {
       users: [CURRENT_MODERATOR, CURRENT_MEMBER],
-      groups: MOCK_GROUPS,
-      members: MOCK_MEMBERS,
-      payments: generateMockTransactions(),
+      groups: [],
+      members: [],
+      payments: [],
       payouts: [],
-      notifications: MOCK_NOTIFICATIONS,
+      notifications: [],
     };
 
     this.persist(initialData);

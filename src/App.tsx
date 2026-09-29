@@ -28,6 +28,9 @@ import { SettingsPage } from './pages/dashboard/SettingsPage';
 // Member view
 import { MemberPortalPage } from './pages/member/MemberPortalPage';
 
+// Payment Processing & Confirmation View (Mobile Money / Carte)
+import { PaymentProcessingPage } from './pages/PaymentProcessingPage';
+
 // 404
 import { NotFoundPage } from './pages/NotFoundPage';
 
@@ -56,6 +59,10 @@ export default function App() {
 
           {/* Member Portal Route */}
           <Route path="/member" element={<MemberPortalPage />} />
+
+          {/* Secure Payment Processing & Confirmation */}
+          <Route path="/payment/processing" element={<PaymentProcessingPage />} />
+          <Route path="/payment-processing" element={<PaymentProcessingPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<NotFoundPage />} />

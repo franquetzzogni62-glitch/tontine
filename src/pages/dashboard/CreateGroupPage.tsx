@@ -49,7 +49,7 @@ export const CreateGroupPage: React.FC = () => {
   const [selectedMembers, setSelectedMembers] = useState<
     { id: string; name: string; phone: string; turnOrder: number }[]
   >(() => {
-    return availableMembers.slice(0, 8).map((m, idx) => ({
+    return availableMembers.map((m, idx) => ({
       id: m.id,
       name: m.name,
       phone: m.phone,
@@ -459,58 +459,102 @@ export const CreateGroupPage: React.FC = () => {
             </div>
           </CardHeader>
 
-          <CardContent className="space-y-3">
-            <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-              {selectedMembers.map((member, idx) => (
-                <div
-                  key={member.id}
-                  className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold font-mono text-xs flex items-center justify-center shrink-0">
-                      #{member.turnOrder}
-                    </span>
-                    <Avatar name={member.name} size="xs" />
-                    <div className="min-w-0">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
-                        {member.name}
+          <CardContent className="space-y-4">
+            {selectedMembers.length === 0 ? (
+              <div className="p-6 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 text-center space-y-3 bg-slate-50/50 dark:bg-slate-900/40">
+                <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                  <Users2 size={24} />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Aucun participant ajouté pour le moment
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Pour composer une rotation de tontine, ajoutez au moins 2 membres ci-dessous.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
+                {selectedMembers.map((member, idx) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold font-mono text-xs flex items-center justify-center shrink-0">
+                        #{member.turnOrder}
                       </span>
-                      <span className="text-[11px] font-mono text-slate-400 truncate">
-                        {member.phone}
-                      </span>
+                      <Avatar name={member.name} size="xs" />
+                      <div className="min-w-0">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                          {member.name}
+                        </span>
+                        <span className="text-[11px] font-mono text-slate-400 truncate">
+                          {member.phone}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={idx === 0}
+                        onClick={() => handleMoveOrder(idx, 'up')}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer"
+                        title="Monter"
+                      >
+                        <ArrowUp size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={idx === selectedMembers.length - 1}
+                        onClick={() => handleMoveOrder(idx, 'down')}
+                        className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer"
+                        title="Descendre"
+                      >
+                        <ArrowDown size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveMember(member.id)}
+                        className="p-1.5 text-rose-400 hover:text-rose-600 cursor-pointer ml-1"
+                        title="Retirer"
+                      >
+                        <Trash2 size={15} />
+                      </button>
                     </div>
                   </div>
+                ))}
+              </div>
+            )}
 
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() => handleMoveOrder(idx, 'up')}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer"
-                      title="Monter"
-                    >
-                      <ArrowUp size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === selectedMembers.length - 1}
-                      onClick={() => handleMoveOrder(idx, 'down')}
-                      className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 disabled:opacity-30 cursor-pointer"
-                      title="Descendre"
-                    >
-                      <ArrowDown size={16} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveMember(member.id)}
-                      className="p-1.5 text-rose-400 hover:text-rose-600 cursor-pointer ml-1"
-                      title="Retirer"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                </div>
-              ))}
+            {/* Quick add member right in step 3 */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-800 space-y-2.5">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                Ajouter un participant à cette tontine
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <Input
+                  placeholder="Nom complet (ex: Jean Paul)"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                />
+                <Input
+                  placeholder="Téléphone (+237 6 xx xx xx xx)"
+                  value={newMemberPhone}
+                  onChange={(e) => setNewMemberPhone(e.target.value)}
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleAddCustomMember}
+                leftIcon={<Plus size={14} />}
+                disabled={!newMemberName.trim()}
+              >
+                Ajouter ce participant (#{selectedMembers.length + 1})
+              </Button>
             </div>
           </CardContent>
 
@@ -526,7 +570,17 @@ export const CreateGroupPage: React.FC = () => {
             <Button
               variant="emerald"
               size="md"
-              onClick={() => setCurrentStep(4)}
+              onClick={() => {
+                if (selectedMembers.length < 2) {
+                  addToast(
+                    'Au moins 2 membres requis',
+                    'Veuillez ajouter au moins 2 participants pour constituer les tours de la tontine.',
+                    'warning'
+                  );
+                  return;
+                }
+                setCurrentStep(4);
+              }}
               rightIcon={<ArrowRight size={16} />}
             >
               Étape suivante : Invitations

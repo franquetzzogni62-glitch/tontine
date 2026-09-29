@@ -36,21 +36,27 @@ export const ReportsPage: React.FC = () => {
     window.print();
   };
 
-  // 12 months simulated data for commissions and total contributions
-  const monthlyData = [
-    { month: 'Oct 25', cotisations: 1250000, commissions: 110000 },
-    { month: 'Nov 25', cotisations: 1420000, commissions: 130000 },
-    { month: 'Déc 25', cotisations: 1980000, commissions: 185000 },
-    { month: 'Jan 26', cotisations: 1650000, commissions: 150000 },
-    { month: 'Fév 26', cotisations: 1780000, commissions: 162000 },
-    { month: 'Mar 26', cotisations: 2100000, commissions: 190000 },
-    { month: 'Avr 26', cotisations: 1890000, commissions: 170000 },
-    { month: 'Mai 26', cotisations: 2250000, commissions: 205000 },
-    { month: 'Juin 26', cotisations: 2410000, commissions: 218000 },
-    { month: 'Juil 26', cotisations: 2320000, commissions: 210000 },
-    { month: 'Août 26', cotisations: 2580000, commissions: 235000 },
-    { month: 'Sep 26', cotisations: 2850000, commissions: 260000 },
-  ];
+  // Real monthly data dynamically calculated from actual payments
+  const monthlyData = React.useMemo(() => {
+    const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+    const now = new Date();
+    const result = [];
+    const count = period === 'month' ? 1 : period === 'quarter' ? 3 : 6;
+    for (let i = count - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const mName = months[d.getMonth()] + ' ' + String(d.getFullYear()).slice(2);
+      const mYear = d.getFullYear();
+      const mMonth = d.getMonth();
+      const matchingPayments = payments.filter((p) => {
+        const pDate = new Date(p.date);
+        return pDate.getFullYear() === mYear && pDate.getMonth() === mMonth && p.status === 'paid';
+      });
+      const cotisations = matchingPayments.reduce((acc, p) => acc + p.amount, 0);
+      const commissions = matchingPayments.reduce((acc, p) => acc + (p.commission || 0), 0);
+      result.push({ month: mName, cotisations, commissions });
+    }
+    return result;
+  }, [payments, period]);
 
   // Top 5 members by trust score & contributions
   const topMembers = [...members]

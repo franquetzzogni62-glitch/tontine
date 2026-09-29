@@ -5,9 +5,28 @@ import { Modal } from '../ui/Modal';
 import { Input } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { formatFCFA } from '../../utils/formatters';
-import { CheckCircle2, ShieldCheck, Smartphone, Zap, FileText, QrCode } from 'lucide-react';
+import {
+  CheckCircle2,
+  ShieldCheck,
+  Smartphone,
+  Zap,
+  FileText,
+  CreditCard,
+  Globe,
+  ExternalLink,
+  Lock,
+} from 'lucide-react';
 import { TontineGroup, PaymentTransaction } from '../../types';
 import { ReceiptModal } from './ReceiptModal';
+import {
+  SUPPORTED_COUNTRIES,
+  CurrencyCode,
+  convertCurrency,
+  formatCurrencyAmount,
+  WHITE_LABEL_TEXTS,
+  requestSasPaySession,
+} from '../../lib/saspay';
+import { useNavigate } from 'react-router-dom';
 
 interface MemberPayModalProps {
   isOpen: boolean;
@@ -20,30 +39,98 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
   onClose,
   group,
 }) => {
-  const { currentUser, simulateWebhook } = useApp();
-  const [operator, setOperator] = useState<'MTN MoMo' | 'Orange Money' | 'Wave'>('MTN MoMo');
-  const [phone, setPhone] = useState(currentUser.phone || '+237 6 75 12 34 56');
-  const [step, setStep] = useState<'form' | 'ussd' | 'webhook' | 'success'>('form');
+  const navigate = useNavigate();
+  const { currentUser, simulateWebhook, addToast } = useApp();
+
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string>('CM');
+  const selectedCountry = SUPPORTED_COUNTRIES.find((c) => c.code === selectedCountryCode) || SUPPORTED_COUNTRIES[1];
+
+  const [operator, setOperator] = useState<string>(selectedCountry.operators[0] || 'Orange Money');
+  const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('XAF');
+  const [phone, setPhone] = useState(currentUser.phone || `${selectedCountry.dialCode} 6 75 12 34 56`);
+
+  const [step, setStep] = useState<'form' | 'gateway_loading' | 'ussd' | 'webhook' | 'success'>('form');
   const [generatedTx, setGeneratedTx] = useState<PaymentTransaction | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
 
-  const handlePay = async (e: React.FormEvent) => {
+  // Conversion de montant dans la devise sélectionnée
+  const baseAmountInFCFA = group.contributionAmount;
+  const convertedAmount = convertCurrency(baseAmountInFCFA, 'XOF', selectedCurrency);
+
+  // Changement de pays
+  const handleCountryChange = (countryCode: string) => {
+    setSelectedCountryCode(countryCode);
+    const country = SUPPORTED_COUNTRIES.find((c) => c.code === countryCode);
+    if (country) {
+      setOperator(country.operators[0] || 'Mobile Money');
+      setSelectedCurrency(country.currency);
+      setPhone(`${country.dialCode} `);
+    }
+  };
+
+  /**
+   * Initialise le paiement via le guichet sécurisé avec stratégie multi-endpoint fallback
+   */
+  const handleGatewayCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
+    setStep('gateway_loading');
+
+    try {
+      const orderId = `TF-ORD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+      const session = await requestSasPaySession({
+        amount: convertedAmount,
+        currency: selectedCurrency,
+        orderId,
+        customerEmail: currentUser.email || 'client@tontiflow.africa',
+        customerPhone: phone,
+        customerName: currentUser.name,
+        metadata: {
+          groupId: group.id,
+          groupName: group.name,
+          memberId: currentUser.id,
+          operator,
+          type: 'contribution',
+        },
+      });
+
+      if (session && session.checkout_url) {
+        addToast(WHITE_LABEL_TEXTS.badgeSecure, 'Redirection vers le guichet de paiement...', 'info');
+        onClose();
+        // Redirection vers le guichet sécurisé ou vue de traitement
+        if (session.checkout_url.startsWith('http') && !session.checkout_url.includes(window.location.host)) {
+          window.location.href = session.checkout_url;
+        } else {
+          navigate(session.checkout_url);
+        }
+      } else {
+        throw new Error('Impossible de générer le guichet.');
+      }
+    } catch (err: any) {
+      setStep('form');
+      addToast('Erreur passerelle', WHITE_LABEL_TEXTS.errorMessage, 'error');
+    }
+  };
+
+  /**
+   * Alternative : Paiement direct avec prompt USSD
+   */
+  const handleDirectUSSD = async () => {
     setStep('ussd');
 
-    // Simulate USSD approval
     setTimeout(() => {
       setStep('webhook');
     }, 1200);
 
-    // Call real backend simulateWebhook
     setTimeout(async () => {
       try {
         const res = await simulateWebhook({
           groupId: group.id,
           memberId: currentUser.id,
           amount: group.contributionAmount,
-          operator,
+          operator: (['MTN MoMo', 'Orange Money', 'Wave'].includes(operator)
+            ? operator
+            : 'Orange Money') as any,
           phoneNumber: phone,
           status: 'completed',
         });
@@ -102,100 +189,179 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
         maxWidth="md"
       >
         {step === 'form' && (
-          <form onSubmit={handlePay} className="space-y-4 text-left text-xs">
-            {/* Summary Box */}
-            <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
-              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
-                {group.name}
+          <form onSubmit={handleGatewayCheckout} className="space-y-4 text-left text-xs">
+            {/* Top Badges */}
+            <div className="flex items-center justify-between pb-1">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px]">
+                <ShieldCheck size={14} />
+                <span>{WHITE_LABEL_TEXTS.badgeSecure}</span>
+              </div>
+              <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400">
+                {WHITE_LABEL_TEXTS.badgeInstant}
               </span>
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
-                  {formatFCFA(group.contributionAmount)}
+            </div>
+
+            {/* Summary Box */}
+            <div className="p-4 rounded-xl bg-slate-100/80 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">
+                  {group.name}
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
-                  Tour #{group.currentDay} sur {group.totalMembersCount}
+                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                  Tour #{group.currentDay} / {group.totalMembersCount}
                 </span>
+              </div>
+
+              <div className="flex items-baseline justify-between pt-1">
+                <div>
+                  <span className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
+                    {formatCurrencyAmount(convertedAmount, selectedCurrency)}
+                  </span>
+                  {selectedCurrency !== 'XOF' && selectedCurrency !== 'XAF' && (
+                    <span className="text-[11px] text-slate-400 block">
+                      ≈ {formatFCFA(baseAmountInFCFA)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Sélecteur de Devise */}
+                <select
+                  value={selectedCurrency}
+                  onChange={(e) => setSelectedCurrency(e.target.value as CurrencyCode)}
+                  aria-label="Sélectionner la devise"
+                  className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
+                >
+                  <option value="XAF">FCFA (CEMAC)</option>
+                  <option value="XOF">FCFA (UEMOA)</option>
+                  <option value="USD">USD ($)</option>
+                  <option value="EUR">EUR (€)</option>
+                  <option value="GHS">GHS (GH₵)</option>
+                  <option value="KES">KES (KSh)</option>
+                </select>
               </div>
             </div>
 
-            {/* Payment Method Selector */}
+            {/* Sélecteur de Pays */}
             <div>
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
-                Choisissez votre moyen de paiement Mobile Money
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Globe size={14} className="text-slate-400" />
+                <span>Pays de facturation Mobile Money</span>
               </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setOperator('MTN MoMo')}
-                  className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
-                    operator === 'MTN MoMo'
-                      ? 'border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300 font-semibold ring-2 ring-amber-500/20'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-full bg-amber-400 text-slate-950 flex items-center justify-center font-bold text-xs">
-                    MoMo
-                  </div>
-                  <span className="text-xs font-medium">MTN MoMo</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOperator('Orange Money')}
-                  className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
-                    operator === 'Orange Money'
-                      ? 'border-orange-500 bg-orange-500/10 text-orange-700 dark:text-orange-300 font-semibold ring-2 ring-orange-500/20'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-full bg-orange-500 text-white flex items-center justify-center font-bold text-xs">
-                    OM
-                  </div>
-                  <span className="text-xs font-medium">Orange Money</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setOperator('Wave')}
-                  className={`p-3 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center gap-1.5 ${
-                    operator === 'Wave'
-                      ? 'border-sky-500 bg-sky-500/10 text-sky-700 dark:text-sky-300 font-semibold ring-2 ring-sky-500/20'
-                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center font-bold text-xs">
-                    Wave
-                  </div>
-                  <span className="text-xs font-medium">Wave</span>
-                </button>
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-28 overflow-y-auto p-1 border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-900/50">
+                {SUPPORTED_COUNTRIES.map((country) => (
+                  <button
+                    key={country.code}
+                    type="button"
+                    onClick={() => handleCountryChange(country.code)}
+                    className={`p-1.5 rounded-lg text-center transition-all cursor-pointer flex flex-col items-center gap-0.5 border ${
+                      selectedCountryCode === country.code
+                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 font-semibold ring-1 ring-emerald-500'
+                        : 'border-transparent hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
+                    }`}
+                  >
+                    <span className="text-base">{country.flag}</span>
+                    <span className="text-[10px] truncate max-w-full font-medium">{country.name}</span>
+                  </button>
+                ))}
               </div>
             </div>
 
+            {/* Payment Operators in Country */}
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+                Opérateur de paiement ({selectedCountry.name})
+              </label>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {selectedCountry.operators.map((op) => {
+                  const isSelected = operator === op;
+                  return (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => setOperator(op)}
+                      className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer flex items-center justify-center gap-2 ${
+                        isSelected
+                          ? 'border-emerald-500 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-bold ring-2 ring-emerald-500/20'
+                          : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      {op.toLowerCase().includes('carte') ? (
+                        <CreditCard size={16} className="text-slate-600 dark:text-slate-400" />
+                      ) : (
+                        <Smartphone size={16} className="text-emerald-600 dark:text-emerald-400" />
+                      )}
+                      <span className="text-xs truncate">{op}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Numéro de téléphone */}
             <Input
-              label="Numéro de téléphone du compte émetteur"
+              label="Numéro de compte Mobile Money (ou Carte)"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               leftIcon={<Smartphone size={16} />}
               required
-              helperText="Une invite USSD ou push notification sera envoyée sur ce numéro."
+              helperText={`Format attendu avec indicatif : ${selectedCountry.dialCode} ...`}
             />
 
-            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 text-slate-500 text-[11px]">
-              <ShieldCheck size={16} className="text-emerald-500 shrink-0" />
-              <span>Validation instantanée par Webhook sécurisé et émission de reçu légal.</span>
+            <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/50 text-emerald-800 dark:text-emerald-300 text-[11px]">
+              <Lock size={15} className="text-emerald-600 shrink-0" />
+              <span>
+                {WHITE_LABEL_TEXTS.subtitle}
+              </span>
             </div>
 
-            <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100 dark:border-slate-800">
-              <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            {/* Actions */}
+            <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+              <Button type="button" variant="outline" size="sm" onClick={onClose} className="w-full sm:w-auto">
                 Annuler
               </Button>
-              <Button type="submit" variant="emerald" size="md" className="flex-1">
-                Lancer le paiement ({formatFCFA(group.contributionAmount)})
+
+              <Button
+                type="button"
+                variant="outline"
+                size="md"
+                onClick={handleDirectUSSD}
+                className="w-full sm:w-auto text-xs"
+              >
+                Validation Rapide USSD
+              </Button>
+
+              <Button
+                type="submit"
+                variant="emerald"
+                size="md"
+                className="w-full sm:flex-1 font-bold text-xs"
+                rightIcon={<ExternalLink size={15} />}
+              >
+                Payer via {WHITE_LABEL_TEXTS.buttonLabel}
               </Button>
             </div>
           </form>
         )}
 
+        {/* LOADING GATEWAY SESSION */}
+        {step === 'gateway_loading' && (
+          <div className="py-10 flex flex-col items-center text-center space-y-4">
+            <div className="relative">
+              <div className="w-16 h-16 rounded-full border-4 border-emerald-500/20 border-t-emerald-500 animate-spin" />
+              <ShieldCheck className="w-7 h-7 text-emerald-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+            </div>
+            <div>
+              <h4 className="text-base font-bold text-slate-900 dark:text-white">
+                {WHITE_LABEL_TEXTS.loadingSession}
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
+                Connexion sécurisée aux serveurs bancaires et de télécommunication agréés...
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* USSD APPROVAL */}
         {step === 'ussd' && (
           <div className="py-8 flex flex-col items-center text-center space-y-4">
             <div className="relative">
@@ -213,6 +379,7 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
           </div>
         )}
 
+        {/* WEBHOOK PROCESSING */}
         {step === 'webhook' && (
           <div className="py-8 flex flex-col items-center text-center space-y-4">
             <div className="relative">
@@ -221,15 +388,16 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
             </div>
             <div>
               <h4 className="text-base font-bold text-slate-900 dark:text-white">
-                Traitement du Webhook {operator}...
+                Traitement du Webhook Sécurisé...
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mt-1">
-                Validation du hash cryptographique et mise à jour du grand livre de la tontine.
+                Validation du hash cryptographique et mise à jour instantanée du grand livre de la tontine.
               </p>
             </div>
           </div>
         )}
 
+        {/* SUCCESS STATE */}
         {step === 'success' && (
           <div className="py-4 flex flex-col items-center text-center space-y-4 text-xs">
             <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
@@ -240,7 +408,7 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
                 Cotisation validée avec succès !
               </h4>
               <p className="text-xs text-slate-600 dark:text-slate-400 max-w-sm mt-1">
-                Votre versement de <strong className="text-slate-900 dark:text-white">{formatFCFA(group.contributionAmount)}</strong> pour la tontine <strong className="text-slate-900 dark:text-white">{group.name}</strong> a bien été comptabilisé.
+                Votre versement de <strong className="text-slate-900 dark:text-white">{formatCurrencyAmount(convertedAmount, selectedCurrency)}</strong> pour la tontine <strong className="text-slate-900 dark:text-white">{group.name}</strong> a bien été comptabilisé.
               </p>
             </div>
 
@@ -263,7 +431,7 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
               </div>
               <div className="flex justify-between">
                 <span>Statut :</span>
-                <span className="text-emerald-600 font-semibold">Validé par Webhook instantané</span>
+                <span className="text-emerald-600 font-semibold">Validé & Sécurisé</span>
               </div>
             </div>
 
@@ -290,6 +458,7 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
         )}
       </Modal>
 
+      {/* Reçu officiel modal */}
       {generatedTx && (
         <ReceiptModal
           isOpen={receiptOpen}

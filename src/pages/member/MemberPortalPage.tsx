@@ -30,6 +30,7 @@ import {
   ShieldCheck,
   AlertCircle,
   Coins,
+  Users2,
 } from 'lucide-react';
 import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
 
@@ -297,77 +298,93 @@ export const MemberPortalPage: React.FC = () => {
             </span>
           </div>
 
-          {displayGroups.map((group) => {
-            const memberRecord = group.members.find(
-              (m) => m.memberId === currentUser.id || m.memberId === 'mem_2'
-            );
-            const hasPaid = memberRecord?.hasPaidToday ?? false;
-            const isMemberDepleted = memberRecord?.status === 'GUARANTEE_DEPLETED' || isGuaranteeDepleted;
+          {displayGroups.length === 0 ? (
+            <div className="p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                <Users2 size={24} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                  Aucune tontine active
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  Vous n'êtes inscrit à aucune tontine pour le moment. Vous recevrez une invitation par WhatsApp ou SMS dès qu'un groupe sera lancé.
+                </p>
+              </div>
+            </div>
+          ) : (
+            displayGroups.map((group) => {
+              const memberRecord = group.members.find(
+                (m) => m.memberId === currentUser.id || m.memberId === 'mem_2'
+              );
+              const hasPaid = memberRecord?.hasPaidToday ?? false;
+              const isMemberDepleted = memberRecord?.status === 'GUARANTEE_DEPLETED' || isGuaranteeDepleted;
 
-            return (
-              <Card key={group.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                      {group.name}
-                    </h4>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      Tour #{group.currentDay} / {group.totalMembersCount} · {group.type === 'rotative' ? 'Rotative Fixe' : group.type}
-                    </p>
-                  </div>
-
-                  <Badge variant={hasPaid ? 'success' : isMemberDepleted ? 'danger' : 'warning'}>
-                    {hasPaid ? 'À jour' : isMemberDepleted ? 'Caution épuisée' : 'Cotisation due'}
-                  </Badge>
-                </div>
-
-                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
-                  <div>
-                    <span className="text-[11px] text-slate-400 block">Montant du versement</span>
-                    <span className="font-mono text-base font-bold text-slate-900 dark:text-white">
-                      {formatFCFA(group.contributionAmount)}
-                    </span>
-                  </div>
-
-                  {!hasPaid ? (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="emerald"
-                        size="sm"
-                        onClick={() => handleOpenPay(group)}
-                        leftIcon={<Smartphone size={15} />}
-                      >
-                        Payer
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-amber-700 dark:text-amber-300 border-amber-500/40 text-[11px]"
-                        onClick={() => handleOpenPenalty(group)}
-                        title="Régulariser avec pénalité 50/50"
-                      >
-                        Pénalité ({formatFCFA(group.customPenaltyAmount || 1000)})
-                      </Button>
+              return (
+                <Card key={group.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                        {group.name}
+                      </h4>
+                      <p className="text-xs text-slate-500 mt-0.5">
+                        Tour #{group.currentDay} / {group.totalMembersCount} · {group.type === 'rotative' ? 'Rotative Fixe' : group.type}
+                      </p>
                     </div>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                      <CheckCircle2 size={16} /> Versement validé
-                    </span>
-                  )}
-                </div>
 
-                <div className="space-y-1">
-                  <ProgressBar
-                    value={group.currentDay}
-                    max={group.totalMembersCount}
-                    showLabel
-                    label="Avancement du cycle"
-                    size="sm"
-                  />
-                </div>
-              </Card>
-            );
-          })}
+                    <Badge variant={hasPaid ? 'success' : isMemberDepleted ? 'danger' : 'warning'}>
+                      {hasPaid ? 'À jour' : isMemberDepleted ? 'Caution épuisée' : 'Cotisation due'}
+                    </Badge>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
+                    <div>
+                      <span className="text-[11px] text-slate-400 block">Montant du versement</span>
+                      <span className="font-mono text-base font-bold text-slate-900 dark:text-white">
+                        {formatFCFA(group.contributionAmount)}
+                      </span>
+                    </div>
+
+                    {!hasPaid ? (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="emerald"
+                          size="sm"
+                          onClick={() => handleOpenPay(group)}
+                          leftIcon={<Smartphone size={15} />}
+                        >
+                          Payer
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-amber-700 dark:text-amber-300 border-amber-500/40 text-[11px]"
+                          onClick={() => handleOpenPenalty(group)}
+                          title="Régulariser avec pénalité 50/50"
+                        >
+                          Pénalité ({formatFCFA(group.customPenaltyAmount || 1000)})
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
+                        <CheckCircle2 size={16} /> Versement validé
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <ProgressBar
+                      value={group.currentDay}
+                      max={group.totalMembersCount}
+                      showLabel
+                      label="Avancement du cycle"
+                      size="sm"
+                    />
+                  </div>
+                </Card>
+              );
+            })
+          )}
         </div>
 
         {/* Member Stats Summary */}
@@ -402,39 +419,45 @@ export const MemberPortalPage: React.FC = () => {
             </div>
           </CardHeader>
 
-          <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {myPayments.slice(0, 6).map((p) => (
-              <div key={p.id} className="py-2.5 flex items-center justify-between">
-                <div>
-                  <h5 className="text-xs font-bold text-slate-900 dark:text-white">
-                    {p.groupName}
-                  </h5>
-                  <p className="text-[11px] text-slate-400 font-mono">
-                    {formatDateTime(p.date)} · {p.method}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-right">
-                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white block">
-                      {formatFCFA(p.amount)}
-                    </span>
-                    <span className="text-[10px] text-emerald-600 font-semibold">
-                      Validé
-                    </span>
+          {myPayments.length === 0 ? (
+            <p className="py-6 text-center text-xs text-slate-400">
+              Aucun versement effectué pour le moment. Vos reçus numériques apparaîtront ici.
+            </p>
+          ) : (
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
+              {myPayments.slice(0, 6).map((p) => (
+                <div key={p.id} className="py-2.5 flex items-center justify-between">
+                  <div>
+                    <h5 className="text-xs font-bold text-slate-900 dark:text-white">
+                      {p.groupName}
+                    </h5>
+                    <p className="text-[11px] text-slate-400 font-mono">
+                      {formatDateTime(p.date)} · {p.method}
+                    </p>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-bold text-slate-900 dark:text-white block">
+                        {formatFCFA(p.amount)}
+                      </span>
+                      <span className="text-[10px] text-emerald-600 font-semibold">
+                        Validé
+                      </span>
+                    </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleOpenReceipt(p)}
-                    title="Voir le reçu de paiement"
-                  >
-                    <FileText size={14} className="text-emerald-600" />
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenReceipt(p)}
+                      title="Voir le reçu de paiement"
+                    >
+                      <FileText size={14} className="text-emerald-600" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </Card>
       </main>
 

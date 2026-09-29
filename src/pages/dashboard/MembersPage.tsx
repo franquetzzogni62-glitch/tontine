@@ -6,7 +6,9 @@ import { Input } from '../../components/ui/Input';
 import { Badge } from '../../components/ui/Badge';
 import { Avatar } from '../../components/ui/Avatar';
 import { Tabs } from '../../components/ui/Tabs';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { MemberDetailsModal } from '../../components/modals/MemberDetailsModal';
+import { AddMemberModal } from '../../components/modals/AddMemberModal';
 import { Member } from '../../types';
 import {
   Search,
@@ -18,6 +20,7 @@ import {
   ShieldCheck,
   UserX,
   UserCheck2,
+  Users,
 } from 'lucide-react';
 import { formatFCFA, formatDate, exportToCSV } from '../../utils/formatters';
 
@@ -27,6 +30,7 @@ export const MembersPage: React.FC = () => {
   const [filter, setFilter] = useState('all');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  const [addModalOpen, setAddModalOpen] = useState(false);
 
   // Filter members
   const filteredMembers = members.filter((m) => {
@@ -111,8 +115,17 @@ export const MembersPage: React.FC = () => {
             size="sm"
             onClick={handleExportCSV}
             leftIcon={<Download size={15} />}
+            disabled={members.length === 0}
           >
             Exporter CSV
+          </Button>
+          <Button
+            variant="emerald"
+            size="sm"
+            onClick={() => setAddModalOpen(true)}
+            leftIcon={<UserPlus size={15} />}
+          >
+            Ajouter un membre
           </Button>
         </div>
       </div>
@@ -135,105 +148,125 @@ export const MembersPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Members table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
-                <th className="pb-3 px-3">Membre</th>
-                <th className="pb-3 px-3">Téléphone & Ville</th>
-                <th className="pb-3 px-3 text-center">Score Confiance</th>
-                <th className="pb-3 px-3 text-center">Groupes</th>
-                <th className="pb-3 px-3 text-right">Total cotisé</th>
-                <th className="pb-3 px-3 text-center">Statut</th>
-                <th className="pb-3 px-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredMembers.map((member) => (
-                <tr
-                  key={member.id}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar name={member.name} src={member.avatarUrl} size="sm" />
-                      <div>
-                        <span className="font-bold block leading-tight">{member.name}</span>
-                        <span className="text-[11px] text-slate-400 font-normal">
-                          Depuis le {formatDate(member.joinedDate)}
-                        </span>
-                      </div>
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
-                    <div className="font-mono">{member.phone}</div>
-                    <span className="text-[11px] text-slate-400">{member.city}</span>
-                  </td>
-
-                  <td className="py-3 px-3 text-center">
-                    <div className="inline-flex items-center gap-1 font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
-                      <Award size={13} />
-                      <span>{member.trustScore}%</span>
-                    </div>
-                  </td>
-
-                  <td className="py-3 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
-                    {member.groupsCount}
-                  </td>
-
-                  <td className="py-3 px-3 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-white">
-                    {formatFCFA(member.totalContributed)}
-                  </td>
-
-                  <td className="py-3 px-3 text-center">
-                    {member.status === 'GUARANTEE_DEPLETED' || (member.status as string) === 'guarantee_depleted' ? (
-                      <Badge variant="danger">
-                        Caution Épuisée
-                      </Badge>
-                    ) : (
-                      <Badge variant={member.status === 'active' ? 'success' : 'danger'}>
-                        {member.status === 'active' ? 'Actif' : 'Inactif'}
-                      </Badge>
-                    )}
-                  </td>
-
-                  <td className="py-3 px-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleOpenDetails(member)}
-                      >
-                        Voir profil
-                      </Button>
-                      <button
-                        onClick={() => handleToggleStatus(member)}
-                        className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
-                        title={member.status === 'active' ? 'Désactiver ce membre' : 'Réactiver ce membre'}
-                      >
-                        {member.status === 'active' ? (
-                          <UserX size={15} />
-                        ) : (
-                          <UserCheck2 size={15} className="text-emerald-500" />
-                        )}
-                      </button>
-                    </div>
-                  </td>
+      {/* Members table or Empty State */}
+      {filteredMembers.length === 0 ? (
+        <EmptyState
+          icon={<Users size={28} />}
+          title={searchQuery ? 'Aucun membre correspondant' : 'Aucun membre enregistré'}
+          description={
+            searchQuery
+              ? 'Aucun membre ne correspond à vos critères de recherche.'
+              : 'Commencez par ajouter les premiers membres de votre tontine ou invitez-les par lien.'
+          }
+          actionLabel="Ajouter un membre"
+          onAction={() => setAddModalOpen(true)}
+        />
+      ) : (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
+                  <th className="pb-3 px-3">Membre</th>
+                  <th className="pb-3 px-3">Téléphone & Ville</th>
+                  <th className="pb-3 px-3 text-center">Score Confiance</th>
+                  <th className="pb-3 px-3 text-center">Groupes</th>
+                  <th className="pb-3 px-3 text-right">Total cotisé</th>
+                  <th className="pb-3 px-3 text-center">Statut</th>
+                  <th className="pb-3 px-3 text-right">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredMembers.map((member) => (
+                  <tr
+                    key={member.id}
+                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={member.name} src={member.avatarUrl} size="sm" />
+                        <div>
+                          <span className="font-bold block leading-tight">{member.name}</span>
+                          <span className="text-[11px] text-slate-400 font-normal">
+                            Depuis le {formatDate(member.joinedDate)}
+                          </span>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-3 text-slate-600 dark:text-slate-300">
+                      <div className="font-mono">{member.phone}</div>
+                      <span className="text-[11px] text-slate-400">{member.city}</span>
+                    </td>
+
+                    <td className="py-3 px-3 text-center">
+                      <div className="inline-flex items-center gap-1 font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md">
+                        <Award size={13} />
+                        <span>{member.trustScore}%</span>
+                      </div>
+                    </td>
+
+                    <td className="py-3 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
+                      {member.groupsCount}
+                    </td>
+
+                    <td className="py-3 px-3 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-white">
+                      {formatFCFA(member.totalContributed)}
+                    </td>
+
+                    <td className="py-3 px-3 text-center">
+                      {member.status === 'GUARANTEE_DEPLETED' || (member.status as string) === 'guarantee_depleted' ? (
+                        <Badge variant="danger">
+                          Caution Épuisée
+                        </Badge>
+                      ) : (
+                        <Badge variant={member.status === 'active' ? 'success' : 'danger'}>
+                          {member.status === 'active' ? 'Actif' : 'Inactif'}
+                        </Badge>
+                      )}
+                    </td>
+
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenDetails(member)}
+                        >
+                          Voir profil
+                        </Button>
+                        <button
+                          onClick={() => handleToggleStatus(member)}
+                          className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
+                          title={member.status === 'active' ? 'Désactiver ce membre' : 'Réactiver ce membre'}
+                        >
+                          {member.status === 'active' ? (
+                            <UserX size={15} />
+                          ) : (
+                            <UserCheck2 size={15} className="text-emerald-500" />
+                          )}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Details modal */}
       <MemberDetailsModal
         member={selectedMember}
         isOpen={detailsModalOpen}
         onClose={() => setDetailsModalOpen(false)}
+      />
+
+      {/* Add member modal */}
+      <AddMemberModal
+        isOpen={addModalOpen}
+        onClose={() => setAddModalOpen(false)}
       />
     </div>
   );

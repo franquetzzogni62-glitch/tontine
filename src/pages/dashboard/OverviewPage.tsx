@@ -55,24 +55,53 @@ export const OverviewPage: React.FC = () => {
 
   // Recovery rate
   const paidPayments = payments.filter((p) => p.status === 'paid').length;
-  const recoveryRate = payments.length > 0 ? Math.round((paidPayments / payments.length) * 100) : 98;
+  const recoveryRate = payments.length > 0 ? Math.round((paidPayments / payments.length) * 100) : 100;
 
-  // Chart data: Contributions per 5-day intervals over 30 days
-  const chartData = [
-    { period: '1-5 Sep', total: 145000, commission: 12500 },
-    { period: '6-10 Sep', total: 182000, commission: 16000 },
-    { period: '11-15 Sep', total: 210000, commission: 18500 },
-    { period: '16-20 Sep', total: 195000, commission: 17000 },
-    { period: '21-25 Sep', total: 245000, commission: 21500 },
-    { period: '26-28 Sep', total: 285000, commission: 24500 },
-  ];
+  // Chart data: Contributions from real payments grouped by 5-day intervals or recent dates
+  const chartData = React.useMemo(() => {
+    if (payments.length === 0) {
+      return [
+        { period: 'Semaine 1', total: 0, commission: 0 },
+        { period: 'Semaine 2', total: 0, commission: 0 },
+        { period: 'Semaine 3', total: 0, commission: 0 },
+        { period: 'Aujourd\'hui', total: 0, commission: 0 },
+      ];
+    }
+    // Group actual payments
+    const today = new Date();
+    const periods = [
+      { label: 'Il y a 3j', daysAgo: 3 },
+      { label: 'Il y a 2j', daysAgo: 2 },
+      { label: 'Hier', daysAgo: 1 },
+      { label: 'Aujourd\'hui', daysAgo: 0 },
+    ];
+    return periods.map((p) => {
+      const targetDate = new Date(today);
+      targetDate.setDate(targetDate.getDate() - p.daysAgo);
+      const dateStr = targetDate.toISOString().split('T')[0];
+      const matching = payments.filter((tx) => tx.date.startsWith(dateStr) && tx.status === 'paid');
+      const total = matching.reduce((sum, tx) => sum + tx.amount, 0);
+      const commission = matching.reduce((sum, tx) => sum + (tx.commission || 0), 0);
+      return { period: p.label, total, commission };
+    });
+  }, [payments]);
 
-  // Pie chart data: Members distribution
-  const memberDistribution = [
-    { name: 'À jour (Cotisés)', value: 16, color: '#10B981' },
-    { name: 'En attente', value: 3, color: '#F59E0B' },
-    { name: 'En retard', value: 1, color: '#EF4444' },
-  ];
+  // Pie chart data: Members distribution dynamically from real members
+  const memberDistribution = React.useMemo(() => {
+    if (members.length === 0) {
+      return [{ name: 'En attente de membres', value: 1, color: '#94A3B8' }];
+    }
+    const active = members.filter((m) => m.status === 'active').length;
+    const depleted = members.filter(
+      (m) => m.status === 'GUARANTEE_DEPLETED' || (m.status as string) === 'guarantee_depleted'
+    ).length;
+    const inactive = members.filter((m) => m.status === 'inactive').length;
+    return [
+      { name: 'À jour (Actifs)', value: active, color: '#10B981' },
+      { name: 'Caution Épuisée', value: depleted, color: '#EF4444' },
+      { name: 'Inactifs', value: inactive, color: '#F59E0B' },
+    ];
+  }, [members]);
 
   // Recent 6 payments
   const recentPayments = payments.slice(0, 6);
@@ -86,7 +115,7 @@ export const OverviewPage: React.FC = () => {
             Bonjour, {currentUser.name} 👋
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Voici la synthèse de vos {activeGroups.length} tontines actives aujourd'hui (28 septembre 2026).
+            Production en direct · {activeGroups.length} tontine{activeGroups.length > 1 ? 's' : ''} active{activeGroups.length > 1 ? 's' : ''} · {totalMembers} membre{totalMembers > 1 ? 's' : ''}
           </p>
         </div>
 
@@ -313,72 +342,93 @@ export const OverviewPage: React.FC = () => {
         </CardHeader>
 
         <div className="space-y-4">
-          {activeGroups.map((group) => {
-            const currentBeneficiary = group.beneficiarySchedule.find(
-              (b) => b.order === group.currentDay
-            );
-            const paidCount = group.members.filter((m) => m.hasPaidToday).length;
-
-            return (
-              <div
-                key={group.id}
-                className="p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-900/60 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
-                {/* Group info & current day */}
-                <div className="space-y-1.5 md:w-1/3">
-                  <div className="flex items-center gap-2">
-                    <Link
-                      to={`/dashboard/groups/${group.id}`}
-                      className="font-bold text-sm text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
-                    >
-                      {group.name}
-                    </Link>
-                    <Badge variant="emerald">
-                      Jour {group.currentDay}/{group.totalMembersCount}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Cotisation : <strong className="font-mono text-slate-700 dark:text-slate-300">{formatFCFA(group.contributionAmount)}</strong> / jour · Commission : <span className="font-mono">{group.moderatorCommission} FCFA</span>
-                  </p>
-                </div>
-
-                {/* Beneficiary of the day */}
-                <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 md:w-1/3 text-left">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
-                    Bénéficiaire du jour (Tour #{group.currentDay})
-                  </span>
-                  <div className="flex items-center justify-between mt-1">
-                    <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {currentBeneficiary?.memberName || 'Cycle terminé'}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatFCFA(currentBeneficiary?.potAmount || 0)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress bar & action */}
-                <div className="space-y-2 md:w-1/4">
-                  <ProgressBar
-                    value={group.currentDay}
-                    max={group.totalMembersCount}
-                    showLabel
-                    label={`Cycle #${group.currentCycle}`}
-                    size="sm"
-                  />
-                  <div className="flex items-center justify-between text-[11px] text-slate-500">
-                    <span>{paidCount}/{group.totalMembersCount} cotisations reçues</span>
-                    <button
-                      onClick={() => advanceGroupRound(group.id)}
-                      className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer"
-                    >
-                      Clôturer tour
-                    </button>
-                  </div>
-                </div>
+          {activeGroups.length === 0 ? (
+            <div className="p-8 text-center rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 space-y-3 bg-slate-50/40 dark:bg-slate-900/40">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto">
+                <Sparkles size={24} />
               </div>
-            );
-          })}
+              <div className="space-y-1">
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Aucune tontine active pour le moment
+                </h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                  Votre plateforme est prête en mode production. Créez votre première tontine rotative pour paramétrer le montant de la cotisation, les gains et la pénalité de retard (50/50).
+                </p>
+              </div>
+              <Link to="/dashboard/groups/new" className="inline-block pt-1">
+                <Button variant="emerald" size="sm" leftIcon={<Plus size={15} />}>
+                  Créer ma première tontine
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            activeGroups.map((group) => {
+              const currentBeneficiary = group.beneficiarySchedule.find(
+                (b) => b.order === group.currentDay
+              );
+              const paidCount = group.members.filter((m) => m.hasPaidToday).length;
+
+              return (
+                <div
+                  key={group.id}
+                  className="p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50/50 dark:bg-slate-900/60 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                >
+                  {/* Group info & current day */}
+                  <div className="space-y-1.5 md:w-1/3">
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/dashboard/groups/${group.id}`}
+                        className="font-bold text-sm text-slate-900 dark:text-white hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                      >
+                        {group.name}
+                      </Link>
+                      <Badge variant="emerald">
+                        Jour {group.currentDay}/{group.totalMembersCount}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      Cotisation : <strong className="font-mono text-slate-700 dark:text-slate-300">{formatFCFA(group.contributionAmount)}</strong> / jour · Commission : <span className="font-mono">{group.moderatorCommission} FCFA</span>
+                    </p>
+                  </div>
+
+                  {/* Beneficiary of the day */}
+                  <div className="p-2.5 rounded-lg bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 md:w-1/3 text-left">
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 block">
+                      Bénéficiaire du jour (Tour #{group.currentDay})
+                    </span>
+                    <div className="flex items-center justify-between mt-1">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {currentBeneficiary?.memberName || 'Cycle terminé'}
+                      </span>
+                      <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                        {formatFCFA(currentBeneficiary?.potAmount || 0)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Progress bar & action */}
+                  <div className="space-y-2 md:w-1/4">
+                    <ProgressBar
+                      value={group.currentDay}
+                      max={group.totalMembersCount}
+                      showLabel
+                      label={`Cycle #${group.currentCycle}`}
+                      size="sm"
+                    />
+                    <div className="flex items-center justify-between text-[11px] text-slate-500">
+                      <span>{paidCount}/{group.totalMembersCount} cotisations reçues</span>
+                      <button
+                        onClick={() => advanceGroupRound(group.id)}
+                        className="text-emerald-600 dark:text-emerald-400 font-semibold hover:underline cursor-pointer"
+                      >
+                        Clôturer tour
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
@@ -398,53 +448,59 @@ export const OverviewPage: React.FC = () => {
           </Link>
         </CardHeader>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
-                <th className="pb-3 px-2">Membre</th>
-                <th className="pb-3 px-2">Groupe</th>
-                <th className="pb-3 px-2">Date & Heure</th>
-                <th className="pb-3 px-2">Moyen</th>
-                <th className="pb-3 px-2 text-right">Montant</th>
-                <th className="pb-3 px-2 text-right">Commission</th>
-                <th className="pb-3 px-2 text-center">Statut</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {recentPayments.map((p) => (
-                <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
-                  <td className="py-3 px-2 font-medium text-slate-900 dark:text-white flex items-center gap-2">
-                    <Avatar name={p.memberName} size="xs" />
-                    <span>{p.memberName}</span>
-                  </td>
-                  <td className="py-3 px-2 text-slate-500 dark:text-slate-400 truncate max-w-[150px]">
-                    {p.groupName}
-                  </td>
-                  <td className="py-3 px-2 text-slate-500 dark:text-slate-400 font-mono">
-                    {formatDateTime(p.date)}
-                  </td>
-                  <td className="py-3 px-2">
-                    <span className="font-medium text-slate-700 dark:text-slate-300">
-                      {p.method}
-                    </span>
-                  </td>
-                  <td className="py-3 px-2 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-white">
-                    {formatFCFA(p.amount)}
-                  </td>
-                  <td className="py-3 px-2 text-right font-mono font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
-                    +{formatFCFA(p.commission)}
-                  </td>
-                  <td className="py-3 px-2 text-center">
-                    <Badge variant={p.status === 'paid' ? 'success' : p.status === 'late' ? 'danger' : 'warning'}>
-                      {p.status === 'paid' ? 'Payé' : p.status === 'late' ? 'En retard' : 'En attente'}
-                    </Badge>
-                  </td>
+        {recentPayments.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-400">
+            Aucun versement enregistré pour le moment. Les cotisations apparaîtront ici dès leur encaissement.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
+                  <th className="pb-3 px-2">Membre</th>
+                  <th className="pb-3 px-2">Groupe</th>
+                  <th className="pb-3 px-2">Date & Heure</th>
+                  <th className="pb-3 px-2">Moyen</th>
+                  <th className="pb-3 px-2 text-right">Montant</th>
+                  <th className="pb-3 px-2 text-right">Commission</th>
+                  <th className="pb-3 px-2 text-center">Statut</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {recentPayments.map((p) => (
+                  <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors">
+                    <td className="py-3 px-2 font-medium text-slate-900 dark:text-white flex items-center gap-2">
+                      <Avatar name={p.memberName} size="xs" />
+                      <span>{p.memberName}</span>
+                    </td>
+                    <td className="py-3 px-2 text-slate-500 dark:text-slate-400 truncate max-w-[150px]">
+                      {p.groupName}
+                    </td>
+                    <td className="py-3 px-2 text-slate-500 dark:text-slate-400 font-mono">
+                      {formatDateTime(p.date)}
+                    </td>
+                    <td className="py-3 px-2">
+                      <span className="font-medium text-slate-700 dark:text-slate-300">
+                        {p.method}
+                      </span>
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-white">
+                      {formatFCFA(p.amount)}
+                    </td>
+                    <td className="py-3 px-2 text-right font-mono font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      +{formatFCFA(p.commission)}
+                    </td>
+                    <td className="py-3 px-2 text-center">
+                      <Badge variant={p.status === 'paid' ? 'success' : p.status === 'late' ? 'danger' : 'warning'}>
+                        {p.status === 'paid' ? 'Payé' : p.status === 'late' ? 'En retard' : 'En attente'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       {/* Record Payment Modal */}

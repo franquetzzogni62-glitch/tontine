@@ -6,6 +6,7 @@ import { Input } from '../../components/ui/Input';
 import { Select } from '../../components/ui/Select';
 import { Badge } from '../../components/ui/Badge';
 import { Tabs } from '../../components/ui/Tabs';
+import { EmptyState } from '../../components/ui/EmptyState';
 import { RecordPaymentModal } from '../../components/modals/RecordPaymentModal';
 import {
   Download,
@@ -190,75 +191,89 @@ export const PaymentsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Payments Table */}
-      <Card>
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
-                <th className="pb-3 px-3">Réf</th>
-                <th className="pb-3 px-3">Date</th>
-                <th className="pb-3 px-3">Membre</th>
-                <th className="pb-3 px-3">Groupe</th>
-                <th className="pb-3 px-3">Moyen</th>
-                <th className="pb-3 px-3 text-right">Montant</th>
-                <th className="pb-3 px-3 text-right">Commission</th>
-                <th className="pb-3 px-3 text-center">Statut</th>
-                <th className="pb-3 px-3 text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {filteredPayments.map((p) => (
-                <tr
-                  key={p.id}
-                  className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
-                >
-                  <td className="py-3 px-3 font-mono font-medium text-slate-400">
-                    {p.transactionRef}
-                  </td>
-                  <td className="py-3 px-3 text-slate-500 font-mono">
-                    {formatDateTime(p.date)}
-                  </td>
-                  <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
-                    <div>{p.memberName}</div>
-                    <span className="text-[10px] text-slate-400 font-mono">{p.memberPhone}</span>
-                  </td>
-                  <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-[140px] truncate">
-                    {p.groupName}
-                  </td>
-                  <td className="py-3 px-3 font-medium text-slate-700 dark:text-slate-300">
-                    {p.method}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
-                    {formatFCFA(p.amount)}
-                  </td>
-                  <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                    +{formatFCFA(p.commission)}
-                  </td>
-                  <td className="py-3 px-3 text-center">
-                    <Badge variant={p.status === 'paid' ? 'success' : p.status === 'late' ? 'danger' : 'warning'}>
-                      {p.status === 'paid' ? 'Payé' : p.status === 'late' ? 'En retard' : 'En attente'}
-                    </Badge>
-                  </td>
-                  <td className="py-3 px-3 text-right">
-                    {p.status !== 'paid' ? (
-                      <Button
-                        variant="emerald"
-                        size="sm"
-                        onClick={() => verifyPayment(p.id)}
-                      >
-                        Valider
-                      </Button>
-                    ) : (
-                      <span className="text-[11px] text-slate-400">Vérifié</span>
-                    )}
-                  </td>
+      {/* Payments Table or Empty State */}
+      {filteredPayments.length === 0 ? (
+        <EmptyState
+          icon={<CreditCard size={28} />}
+          title={searchQuery || statusFilter !== 'all' ? 'Aucune transaction correspondante' : 'Aucune transaction enregistrée'}
+          description={
+            searchQuery || statusFilter !== 'all'
+              ? 'Aucun paiement ne correspond aux filtres appliqués.'
+              : 'Les versements de cotisations et régularisations de pénalités apparaîtront ici dès leur encaissement.'
+          }
+          actionLabel="Encaisser un versement"
+          onAction={() => setRecordModalOpen(true)}
+        />
+      ) : (
+        <Card>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
+                  <th className="pb-3 px-3">Réf</th>
+                  <th className="pb-3 px-3">Date</th>
+                  <th className="pb-3 px-3">Membre</th>
+                  <th className="pb-3 px-3">Groupe</th>
+                  <th className="pb-3 px-3">Moyen</th>
+                  <th className="pb-3 px-3 text-right">Montant</th>
+                  <th className="pb-3 px-3 text-right">Commission</th>
+                  <th className="pb-3 px-3 text-center">Statut</th>
+                  <th className="pb-3 px-3 text-right">Action</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {filteredPayments.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors"
+                  >
+                    <td className="py-3 px-3 font-mono font-medium text-slate-400">
+                      {p.transactionRef}
+                    </td>
+                    <td className="py-3 px-3 text-slate-500 font-mono">
+                      {formatDateTime(p.date)}
+                    </td>
+                    <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">
+                      <div>{p.memberName}</div>
+                      <span className="text-[10px] text-slate-400 font-mono">{p.memberPhone}</span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-600 dark:text-slate-300 max-w-[140px] truncate">
+                      {p.groupName}
+                    </td>
+                    <td className="py-3 px-3 font-medium text-slate-700 dark:text-slate-300">
+                      {p.method}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                      {formatFCFA(p.amount)}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+                      +{formatFCFA(p.commission)}
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <Badge variant={p.status === 'paid' ? 'success' : p.status === 'late' ? 'danger' : 'warning'}>
+                        {p.status === 'paid' ? 'Payé' : p.status === 'late' ? 'En retard' : 'En attente'}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      {p.status !== 'paid' ? (
+                        <Button
+                          variant="emerald"
+                          size="sm"
+                          onClick={() => verifyPayment(p.id)}
+                        >
+                          Valider
+                        </Button>
+                      ) : (
+                        <span className="text-[11px] text-slate-400">Vérifié</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Record modal */}
       <RecordPaymentModal

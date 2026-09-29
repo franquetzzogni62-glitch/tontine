@@ -1,5 +1,10 @@
 import { Router, Request, Response } from 'express';
 import { db } from './db.js';
+import {
+  handleCreateSasPaySession,
+  handleGetSasPayStatus,
+  handleSasPayWebhook,
+} from './saspay.js';
 
 export const apiRouter = Router();
 
@@ -460,4 +465,33 @@ apiRouter.put('/notifications/read-all', (req: Request, res: Response) => {
 
 apiRouter.get('/stats/overview', (req: Request, res: Response) => {
   res.json(db.getStatsOverview());
+});
+
+// ==========================================
+// --- SASAPAY GATEWAY ROUTES ---
+// ==========================================
+
+// Endpoint POST /api/saspay/create-session
+apiRouter.post('/saspay/create-session', handleCreateSasPaySession);
+
+// Endpoint GET /api/saspay/status
+apiRouter.get('/saspay/status', handleGetSasPayStatus);
+
+// Webhook endpoints
+apiRouter.post('/saspay/webhook', handleSasPayWebhook);
+apiRouter.post('/webhook/saspay', handleSasPayWebhook);
+
+// Resilient Node fallback for /api/saspay.php proxy requests
+apiRouter.all('/saspay.php', (req: Request, res: Response) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  if (req.method === 'POST') {
+    return handleCreateSasPaySession(req, res);
+  }
+  return handleGetSasPayStatus(req, res);
 });

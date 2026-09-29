@@ -319,4 +319,45 @@ export const api = {
     const res = await fetch(`${BASE_URL}/stats/overview`);
     return handleResponse(res);
   },
+
+  // SasaPay Gateway (Mobile Money & Carte)
+  async createSasPaySession(payload: {
+    amount: number;
+    currency?: string;
+    orderId?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    customerName?: string;
+    metadata?: Record<string, any>;
+  }): Promise<{ success: boolean; checkout_url: string; sessionId: string; orderId: string }> {
+    const res = await fetch(`${BASE_URL}/saspay/create-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+  },
+
+  async getSasPayStatus(orderId: string, sessionId?: string): Promise<{
+    success: boolean;
+    status: 'completed' | 'pending' | 'failed';
+    orderId: string;
+    receiptNumber?: string;
+    transaction?: PaymentTransaction;
+  }> {
+    const params = new URLSearchParams();
+    if (orderId) params.append('orderId', orderId);
+    if (sessionId) params.append('sessionId', sessionId);
+    const res = await fetch(`${BASE_URL}/saspay/status?${params.toString()}`);
+    return handleResponse(res);
+  },
+
+  async triggerSasPayWebhook(payload: Record<string, any>): Promise<any> {
+    const res = await fetch('/webhook/saspay', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+  },
 };

@@ -6,6 +6,8 @@ import { Badge } from '../ui/Badge';
 import { Avatar } from '../ui/Avatar';
 import { formatFCFA } from '../../utils/formatters';
 import { TontineGroup, Member } from '../../types';
+import { useNavigate } from 'react-router-dom';
+import { requestSasPaySession, WHITE_LABEL_TEXTS } from '../../lib/saspay';
 import {
   AlertTriangle,
   ShieldCheck,
@@ -16,6 +18,7 @@ import {
   CheckCircle2,
   TrendingDown,
   RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -34,10 +37,12 @@ export const RegularizePenaltyModal: React.FC<RegularizePenaltyModalProps> = ({
   member,
   onSuccess,
 }) => {
+  const navigate = useNavigate();
   const { payPenaltyAndTopup, addToast } = useApp();
   const [operator, setOperator] = useState<'Orange Money' | 'MTN MoMo' | 'Wave'>('Orange Money');
   const [phoneNumber, setPhoneNumber] = useState(member?.phone || '+237 6 ');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRedirectingGateway, setIsRedirectingGateway] = useState(false);
   const [result, setResult] = useState<any>(null);
 
   if (!member) return null;
@@ -82,6 +87,42 @@ export const RegularizePenaltyModal: React.FC<RegularizePenaltyModalProps> = ({
       // Error handled by context toast
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOnlineGatewayCheckout = async () => {
+    setIsRedirectingGateway(true);
+    try {
+      const orderId = `TF-PEN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const session = await requestSasPaySession({
+        amount: totalAmount,
+        currency: 'XOF',
+        orderId,
+        customerEmail: member.email || 'client@tontiflow.africa',
+        customerPhone: phoneNumber,
+        customerName: member.name,
+        metadata: {
+          groupId: group.id,
+          groupName: group.name,
+          memberId: member.id,
+          operator,
+          type: 'penalty_topup',
+        },
+      });
+
+      if (session && session.checkout_url) {
+        addToast(WHITE_LABEL_TEXTS.badgeSecure, 'Ouverture du guichet sécurisé...', 'info');
+        onClose();
+        if (session.checkout_url.startsWith('http') && !session.checkout_url.includes(window.location.host)) {
+          window.location.href = session.checkout_url;
+        } else {
+          navigate(session.checkout_url);
+        }
+      }
+    } catch {
+      addToast('Erreur', WHITE_LABEL_TEXTS.errorMessage, 'error');
+    } finally {
+      setIsRedirectingGateway(false);
     }
   };
 
@@ -238,18 +279,31 @@ export const RegularizePenaltyModal: React.FC<RegularizePenaltyModalProps> = ({
             </div>
 
             {/* Actions */}
-            <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
-              <Button variant="outline" size="sm" onClick={handleClose} disabled={isSubmitting}>
+            <div className="pt-3 flex flex-col sm:flex-row items-center justify-end gap-2 border-t border-slate-200 dark:border-slate-800">
+              <Button variant="outline" size="sm" onClick={handleClose} disabled={isSubmitting || isRedirectingGateway} className="w-full sm:w-auto">
                 Annuler
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExecutePayment}
+                isLoading={isSubmitting}
+                disabled={isRedirectingGateway}
+                leftIcon={<RefreshCw size={14} />}
+                className="w-full sm:w-auto text-xs"
+              >
+                Validation Rapide
               </Button>
               <Button
                 variant="emerald"
                 size="md"
-                onClick={handleExecutePayment}
-                isLoading={isSubmitting}
-                leftIcon={<RefreshCw size={15} />}
+                onClick={handleOnlineGatewayCheckout}
+                isLoading={isRedirectingGateway}
+                disabled={isSubmitting}
+                rightIcon={<ExternalLink size={15} />}
+                className="w-full sm:flex-1 text-xs font-bold"
               >
-                Payer {formatFCFA(totalAmount)} & Réactiver (ACTIVE)
+                {WHITE_LABEL_TEXTS.buttonLabel} ({formatFCFA(totalAmount)})
               </Button>
             </div>
           </>
