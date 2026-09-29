@@ -10,6 +10,11 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Input } from '../../components/ui/Input';
 import { RecordPaymentModal } from '../../components/modals/RecordPaymentModal';
 import { InviteModal } from '../../components/modals/InviteModal';
+import { PayoutPotModal } from '../../components/modals/PayoutPotModal';
+import { WebhookSimulatorModal } from '../../components/modals/WebhookSimulatorModal';
+import { ReceiptModal } from '../../components/modals/ReceiptModal';
+import { FinancialSummaryWidget } from '../../components/FinancialSummaryWidget';
+import { PaymentTransaction } from '../../types';
 import {
   ArrowLeft,
   Users2,
@@ -27,25 +32,47 @@ import {
   Sparkles,
   ChevronRight,
   TrendingUp,
+  Coins,
+  Zap,
+  ArrowUp,
+  ArrowDown,
+  ShieldCheck,
+  FileText,
+  AlertTriangle,
+  RotateCw,
 } from 'lucide-react';
 import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
 
 export const GroupDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { groups, members, payments, advanceGroupRound, recordPayment, deleteGroup, addToast } = useApp();
+  const {
+    groups,
+    members,
+    payments,
+    advanceGroupRound,
+    recordPayment,
+    deleteGroup,
+    reorderTurns,
+    verifyMemberPresence,
+    addToast,
+  } = useApp();
 
   const group = groups.find((g) => g.id === id);
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'calendar' | 'payments' | 'settings'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'register' | 'admin' | 'calendar' | 'payments' | 'settings'>('overview');
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [payoutModalOpen, setPayoutModalOpen] = useState(false);
+  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<PaymentTransaction | null>(null);
   const [selectedMemberForPayment, setSelectedMemberForPayment] = useState<string | undefined>(undefined);
 
   if (!group) {
     return (
       <div className="text-center py-16 space-y-4">
-        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Groupe introuvable</h2>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white">Tontine introuvable</h2>
         <p className="text-xs text-slate-500">Ce groupe n'existe pas ou a été archivé.</p>
         <Link to="/dashboard/groups">
           <Button variant="emerald" size="sm">
@@ -60,13 +87,18 @@ export const GroupDetailPage: React.FC = () => {
     (b) => b.order === group.currentDay
   );
 
-  const totalPot = (group.contributionAmount - group.moderatorCommission) * group.totalMembersCount;
-  const expectedToday = group.contributionAmount * group.totalMembersCount;
-  const collectedTodayCount = group.members.filter((m) => m.hasPaidToday).length;
-  const collectedTodayAmount = collectedTodayCount * group.contributionAmount;
+  const netPerMember = group.contributionAmount - group.moderatorCommission;
+  const totalPotExpected = netPerMember * group.totalMembersCount;
 
   // Filter payments for this group
   const groupPayments = payments.filter((p) => p.groupId === group.id);
+
+  // Pot statistics
+  const paidMembersCount = group.members.filter((m) => m.hasPaidToday).length;
+  const paidMembersAmount = paidMembersCount * netPerMember;
+  const remainingPotNeeded = totalPotExpected - paidMembersAmount;
+  const potPercentage = Math.round((paidMembersCount / group.totalMembersCount) * 100);
+  const isPotFullyFunded = paidMembersCount === group.totalMembersCount;
 
   const handleMarkPaid = (memberId: string, memberName: string, memberPhone: string) => {
     recordPayment({
@@ -76,17 +108,19 @@ export const GroupDetailPage: React.FC = () => {
       memberName,
       memberPhone,
       amount: group.contributionAmount,
-      baseAmount: group.contributionAmount - group.moderatorCommission,
+      baseAmount: netPerMember,
       commission: group.moderatorCommission,
       date: new Date().toISOString(),
       status: 'paid',
       method: 'Orange Money',
       verifiedByModerator: true,
+      roundNumber: group.currentDay,
+      cycleNumber: group.currentCycle,
     });
   };
 
   const handleSendReminder = (phone: string, name: string) => {
-    addToast('Relance envoyée', `Un SMS de relance a été envoyé au ${phone} (${name}).`, 'info');
+    addToast('Relance envoyée', `Un SMS & message WhatsApp de relance ont été envoyés à ${name} (${phone}).`, 'info');
   };
 
   const handleArchive = () => {
@@ -94,17 +128,44 @@ export const GroupDetailPage: React.FC = () => {
     navigate('/dashboard/groups');
   };
 
+  const handleViewReceipt = (tx: PaymentTransaction) => {
+    setSelectedTxForReceipt(tx);
+    setReceiptModalOpen(true);
+  };
+
+  // Reorder turns handlers
+  const handleMoveTurn = (memberId: string, direction: 'up' | 'down') => {
+    const currentOrder = group.members.find((m) => m.memberId === memberId)?.turnOrder;
+    if (!currentOrder) return;
+
+    const targetOrder = direction === 'up' ? currentOrder - 1 : currentOrder + 1;
+    if (targetOrder < 1 || targetOrder > group.members.length) return;
+
+    // Swap
+    const otherMember = group.members.find((m) => m.turnOrder === targetOrder);
+    if (!otherMember) return;
+
+    const newTurns = group.members.map((m) => {
+      if (m.memberId === memberId) return { memberId: m.memberId, order: targetOrder };
+      if (m.memberId === otherMember.memberId) return { memberId: m.memberId, order: currentOrder };
+      return { memberId: m.memberId, order: m.turnOrder };
+    });
+
+    reorderTurns(group.id, newTurns);
+  };
+
   const tabsList = [
-    { id: 'overview', label: 'Vue d\'ensemble' },
-    { id: 'members', label: 'Membres', count: group.members.length },
-    { id: 'calendar', label: 'Calendrier des tours' },
-    { id: 'payments', label: 'Paiements', count: groupPayments.length },
+    { id: 'overview', label: 'Tableau du Pot' },
+    { id: 'register', label: 'Registre des Cotisations', count: group.members.length },
+    { id: 'admin', label: 'Espace Administration' },
+    { id: 'calendar', label: 'Ordre de Passage' },
+    { id: 'payments', label: 'Grand Livre', count: groupPayments.length },
     { id: 'settings', label: 'Paramètres' },
   ];
 
   return (
     <div className="space-y-6 text-left">
-      {/* Top Breadcrumb & Actions */}
+      {/* Top Header & Fast Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/80 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <Link
@@ -115,37 +176,52 @@ export const GroupDetailPage: React.FC = () => {
           </Link>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 dark:text-white">
                 {group.name}
               </h2>
               <Badge variant={group.status === 'active' ? 'success' : 'neutral'}>
-                {group.status === 'active' ? 'Actif' : 'Terminé'}
+                {group.status === 'active' ? 'En cours' : group.status}
+              </Badge>
+              <Badge variant="neutral" className="capitalize text-[10px]">
+                {group.type === 'rotative' ? 'Tontine Rotative Fixe' : group.type}
               </Badge>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Cotisation : <strong className="font-mono text-slate-800 dark:text-slate-200">{formatFCFA(group.contributionAmount)}</strong> / jour · Commission modérateur : <span className="font-mono">{group.moderatorCommission} FCFA</span>
+              Cotisation : <strong className="font-mono text-slate-800 dark:text-slate-200">{formatFCFA(group.contributionAmount)}</strong> · Fréquence : <span className="capitalize">{group.frequency === 'daily' ? 'Quotidienne' : group.frequency}</span> · Tirage : {group.drawDay || 'Tous les jours à 18h'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Webhook simulator quick trigger */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setWebhookModalOpen(true)}
+            leftIcon={<Zap size={14} className="text-amber-500" />}
+            title="Tester le Webhook Mobile Money"
+          >
+            Simulateur Webhook
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
             onClick={() => setInviteModalOpen(true)}
-            leftIcon={<Share2 size={15} />}
+            leftIcon={<Share2 size={14} />}
           >
             Inviter
           </Button>
 
+          {/* Payout pot action */}
           {group.status === 'active' && (
             <Button
               variant="emerald"
               size="sm"
-              onClick={() => advanceGroupRound(group.id)}
-              leftIcon={<CheckCircle2 size={15} />}
+              onClick={() => setPayoutModalOpen(true)}
+              leftIcon={<Coins size={15} />}
             >
-              Clôturer le tour #{group.currentDay}
+              Déclencher le Payout (Tour #{group.currentDay})
             </Button>
           )}
         </div>
@@ -159,89 +235,134 @@ export const GroupDetailPage: React.FC = () => {
         variant="underline"
       />
 
-      {/* Tab 1: OVERVIEW */}
+      {/* ========================================================================= */}
+      {/* TAB 1: TABLEAU DE BORD DU POT & VUE D'ENSEMBLE */}
+      {/* ========================================================================= */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          {/* Widget Récapitulatif Financier avec Déduction SaaS 5% */}
+          <FinancialSummaryWidget
+            group={group}
+            onOpenPayoutModal={() => setPayoutModalOpen(true)}
+            isAdmin={true}
+          />
+
           {/* Key Metrics row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Beneficiary of the day */}
-            <Card className="bg-gradient-to-br from-emerald-50 to-white dark:from-emerald-950/30 dark:to-slate-900 border-emerald-200/80 dark:border-emerald-800/60">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block mb-1">
-                Bénéficiaire du jour (Tour #{group.currentDay})
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Tableau de bord du Pot Actuel */}
+            <Card className="p-5 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-teal-500/10 border-emerald-500/30 relative overflow-hidden">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Coins size={14} /> Tableau de Bord du Pot (Tour #{group.currentDay})
+                </span>
+                <Badge variant={isPotFullyFunded ? 'success' : 'warning'}>
+                  {isPotFullyFunded ? '100% Récolté' : `${potPercentage}% Collecté`}
+                </Badge>
+              </div>
+
+              <div className="mt-2">
+                <span className="text-xs text-slate-500 dark:text-slate-400 block">Total collecté ce tour :</span>
+                <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                  {formatFCFA(paidMembersAmount)}
+                </div>
+                <div className="flex justify-between items-baseline text-xs text-slate-500 mt-1">
+                  <span>Objectif : <strong className="font-mono text-slate-700 dark:text-slate-300">{formatFCFA(totalPotExpected)}</strong></span>
+                  <span>Restant : <strong className="font-mono text-amber-600 dark:text-amber-400">{formatFCFA(remainingPotNeeded)}</strong></span>
+                </div>
+              </div>
+
+              <div className="mt-3.5 space-y-1">
+                <ProgressBar
+                  value={paidMembersCount}
+                  max={group.totalMembersCount}
+                  size="md"
+                  color={isPotFullyFunded ? 'emerald' : 'amber'}
+                />
+                <div className="flex justify-between text-[11px] text-slate-400 font-mono">
+                  <span>{paidMembersCount} ont cotisé</span>
+                  <span>{group.totalMembersCount - paidMembersCount} en retard/attente</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Bénéficiaire du Tour Actuel */}
+            <Card className="p-5 border-slate-200 dark:border-slate-800">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                Bénéficiaire désigné ce tour
               </span>
-              <div className="flex items-center gap-3 mt-2">
-                <Avatar name={currentBeneficiary?.memberName || 'Membre'} size="md" />
+
+              <div className="flex items-center gap-3">
+                <Avatar name={currentBeneficiary?.memberName || 'Bénéficiaire'} size="lg" />
                 <div className="min-w-0">
-                  <h4 className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                    {currentBeneficiary?.memberName || 'Aucun'}
+                  <h4 className="text-base font-extrabold text-slate-900 dark:text-white truncate">
+                    {currentBeneficiary?.memberName || 'Non assigné'}
                   </h4>
                   <p className="text-xs font-mono text-slate-500 truncate">
                     {currentBeneficiary?.memberPhone}
                   </p>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 mt-1">
+                    <Sparkles size={12} /> Ramassage Tour #{group.currentDay}
+                  </span>
                 </div>
               </div>
-              <div className="mt-3 pt-3 border-t border-emerald-200/60 dark:border-emerald-800/40 flex justify-between items-baseline">
-                <span className="text-xs text-slate-600 dark:text-slate-400">Montant du pot :</span>
-                <span className="text-lg font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                  {formatFCFA(currentBeneficiary?.potAmount || totalPot)}
+
+              <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center text-xs">
+                <span className="text-slate-500">Échéance programmée :</span>
+                <span className="font-mono font-bold text-slate-800 dark:text-slate-200">
+                  {formatDate(currentBeneficiary?.scheduledDate || group.startDate)}
                 </span>
               </div>
             </Card>
 
-            {/* Collected today vs Expected */}
-            <Card>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-                Collecte du jour
+            {/* Progression Globale du Cycle */}
+            <Card className="p-5 border-slate-200 dark:border-slate-800">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
+                Progression du Cycle (#{group.currentCycle})
               </span>
-              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-                {formatFCFA(collectedTodayAmount)}
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Sur {formatFCFA(expectedToday)} attendus ({collectedTodayCount}/{group.totalMembersCount} membres)
-              </p>
-              <div className="mt-3">
-                <ProgressBar
-                  value={collectedTodayCount}
-                  max={group.totalMembersCount}
-                  size="sm"
-                />
-              </div>
-            </Card>
 
-            {/* Cycle Progress */}
-            <Card>
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-1">
-                Progression du cycle
-              </span>
-              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-                Jour {group.currentDay} / {group.totalMembersCount}
+              <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white">
+                Tour {group.currentDay} sur {group.totalMembersCount}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Cycle #{group.currentCycle} · Du {formatDate(group.startDate)} au {formatDate(group.endDate)}
+              <p className="text-xs text-slate-500 mt-1">
+                Du {formatDate(group.startDate)} au {formatDate(group.endDate)}
               </p>
-              <div className="mt-3">
+
+              <div className="mt-4 space-y-1">
                 <ProgressBar
                   value={group.currentDay}
                   max={group.totalMembersCount}
-                  size="sm"
-                  color="amber"
+                  size="md"
+                  color="emerald"
                 />
+                <span className="text-[11px] text-slate-400 block">
+                  {Math.round((group.currentDay / group.totalMembersCount) * 100)}% des tours complétés
+                </span>
               </div>
             </Card>
           </div>
 
-          {/* Chronological Beneficiary Schedule */}
-          <Card>
-            <CardHeader>
-              <div>
-                <CardTitle>Ordre chronologique des bénéficiaires</CardTitle>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Calendrier de rotation prédéfini et statut des cagnottes
-                </p>
+          {/* Ordre de Passage Visuel (Déjà reçu, Bénéficiaire en cours, À venir) */}
+          <Card className="p-5">
+            <CardHeader className="px-0 pt-0 pb-4">
+              <div className="flex items-center justify-between w-full">
+                <div>
+                  <CardTitle>Ordre de passage & Rotation de la cagnotte</CardTitle>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                    Visualisation chronologique des bénéficiaires et état de déboursement
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab('admin')}
+                  leftIcon={<Settings size={13} />}
+                >
+                  Gérer l'ordre
+                </Button>
               </div>
             </CardHeader>
 
-            <div className="space-y-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {group.beneficiarySchedule.map((item) => {
                 const isCurrent = item.order === group.currentDay;
                 const isCompleted = item.status === 'completed';
@@ -249,64 +370,54 @@ export const GroupDetailPage: React.FC = () => {
                 return (
                   <div
                     key={item.order}
-                    className={`flex items-center justify-between p-3.5 rounded-xl border transition-all ${
+                    className={`p-3.5 rounded-2xl border transition-all relative ${
                       isCurrent
-                        ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30 ring-1 ring-emerald-500/20'
+                        ? 'border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/40 ring-2 ring-emerald-500/30 shadow-md'
                         : isCompleted
-                        ? 'border-slate-200/60 dark:border-slate-800 bg-slate-50/30 dark:bg-slate-900/40 opacity-80'
-                        : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900'
+                        ? 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
                     }`}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold font-mono shrink-0 ${
-                          isCompleted
-                            ? 'bg-slate-200 text-slate-600 dark:bg-slate-800 dark:text-slate-400'
-                            : isCurrent
-                            ? 'bg-emerald-500 text-white'
-                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                        }`}
-                      >
-                        #{item.order}
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <Avatar name={item.memberName} size="sm" />
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                             {item.memberName}
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-mono block">
+                            Tour #{item.order} · {formatDate(item.scheduledDate)}
                           </span>
-                          {isCurrent && (
-                            <Badge variant="emerald" showDot={false}>
-                              Aujourd'hui
-                            </Badge>
-                          )}
                         </div>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2">
-                          <Calendar size={12} /> {formatDate(item.scheduledDate)} · {item.memberPhone}
-                        </p>
                       </div>
+
+                      {isCurrent ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500 text-white animate-pulse">
+                          En cours
+                        </span>
+                      ) : isCompleted ? (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                          Déjà reçu
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                          À venir
+                        </span>
+                      )}
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <span className="font-mono text-xs font-bold text-slate-900 dark:text-white block">
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-xs font-mono">
+                      <span className="text-slate-400 text-[11px]">Cagnotte :</span>
+                      <strong className="text-slate-900 dark:text-white">
                         {formatFCFA(item.potAmount)}
-                      </span>
-                      <span
-                        className={`text-[10px] font-semibold ${
-                          isCompleted
-                            ? 'text-slate-400'
-                            : isCurrent
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-amber-500'
-                        }`}
-                      >
-                        {isCompleted
-                          ? `Remis (${item.payoutReference || 'Validé'})`
-                          : isCurrent
-                          ? 'En cours de collecte'
-                          : 'À venir'}
-                      </span>
+                      </strong>
                     </div>
+
+                    {item.payoutReference && (
+                      <span className="text-[10px] text-emerald-600 font-mono block mt-1">
+                        Réf: {item.payoutReference}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -315,84 +426,124 @@ export const GroupDetailPage: React.FC = () => {
         </div>
       )}
 
-      {/* Tab 2: MEMBERS */}
-      {activeTab === 'members' && (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Membres participants ({group.members.length})</CardTitle>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Statut de paiement du jour et historique des cotisations
-              </p>
-            </div>
+      {/* ========================================================================= */}
+      {/* TAB 2: REGISTRE DES COTISATIONS DU TOUR EN COURS */}
+      {/* ========================================================================= */}
+      {activeTab === 'register' && (
+        <Card className="p-5">
+          <CardHeader className="px-0 pt-0 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+              <div>
+                <CardTitle>Registre des Cotisations · Tour #{group.currentDay}</CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Pointage interactif en temps réel : {paidMembersCount} payés, {group.members.length - paidMembersCount} en retard / attente
+                </p>
+              </div>
 
-            <Button
-              variant="emerald"
-              size="sm"
-              onClick={() => {
-                setSelectedMemberForPayment(undefined);
-                setRecordModalOpen(true);
-              }}
-              leftIcon={<CreditCard size={15} />}
-            >
-              Enregistrer un versement
-            </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setWebhookModalOpen(true)}
+                  leftIcon={<Zap size={14} className="text-amber-500" />}
+                >
+                  Simuler Webhook
+                </Button>
+                <Button
+                  variant="emerald"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedMemberForPayment(undefined);
+                    setRecordModalOpen(true);
+                  }}
+                  leftIcon={<CreditCard size={15} />}
+                >
+                  Encaisser versement
+                </Button>
+              </div>
+            </div>
           </CardHeader>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
-                  <th className="pb-3 px-2">Tour</th>
-                  <th className="pb-3 px-2">Membre</th>
-                  <th className="pb-3 px-2">Téléphone</th>
-                  <th className="pb-3 px-2">Cotisation du jour</th>
-                  <th className="pb-3 px-2 text-right">Total cotisé dans ce groupe</th>
-                  <th className="pb-3 px-2 text-right">Actions</th>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="pb-3 px-3">Tour</th>
+                  <th className="pb-3 px-3">Membre participant</th>
+                  <th className="pb-3 px-3">Téléphone</th>
+                  <th className="pb-3 px-3">Score Confiance</th>
+                  <th className="pb-3 px-3 text-center">Statut Cotisation Tour #{group.currentDay}</th>
+                  <th className="pb-3 px-3 text-right">Cotisé ce tour</th>
+                  <th className="pb-3 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {group.members.map((gm) => {
                   const memberInfo = members.find((m) => m.id === gm.memberId);
-                  const isCurrentTour = gm.turnOrder === group.currentDay;
+                  const isCurrentTourBeneficiary = gm.turnOrder === group.currentDay;
+                  const hasPaid = gm.hasPaidToday;
+
+                  // Find matching payment transaction for this tour if paid
+                  const tx = groupPayments.find((p) => p.memberId === gm.memberId);
 
                   return (
                     <tr
                       key={gm.memberId}
-                      className={`hover:bg-slate-50/50 dark:hover:bg-slate-800/40 transition-colors ${
-                        isCurrentTour ? 'bg-emerald-50/20 dark:bg-emerald-950/10' : ''
+                      className={`hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors ${
+                        isCurrentTourBeneficiary ? 'bg-emerald-50/20 dark:bg-emerald-950/15' : ''
                       }`}
                     >
-                      <td className="py-3 px-2 font-mono font-bold text-slate-500">
+                      <td className="py-3.5 px-3 font-mono font-bold text-slate-500">
                         #{gm.turnOrder}
                       </td>
-                      <td className="py-3 px-2 font-medium text-slate-900 dark:text-white flex items-center gap-2">
-                        <Avatar name={memberInfo?.name || 'Membre'} size="xs" />
-                        <div>
-                          <span>{memberInfo?.name}</span>
-                          {isCurrentTour && (
-                            <span className="block text-[10px] text-emerald-600 font-semibold">
-                              Bénéficiaire du jour
-                            </span>
-                          )}
+
+                      <td className="py-3.5 px-3 font-medium text-slate-900 dark:text-white">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={memberInfo?.name || 'Membre'} size="sm" />
+                          <div>
+                            <span className="font-bold block">{memberInfo?.name}</span>
+                            {isCurrentTourBeneficiary && (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                                <Sparkles size={11} /> Bénéficiaire du tour
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
-                      <td className="py-3 px-2 text-slate-500 font-mono">
+
+                      <td className="py-3.5 px-3 font-mono text-slate-500">
                         {memberInfo?.phone}
                       </td>
-                      <td className="py-3 px-2">
-                        {gm.hasPaidToday ? (
-                          <Badge variant="success">Cotisé aujourd'hui</Badge>
+
+                      <td className="py-3.5 px-3">
+                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-600 dark:text-emerald-400">
+                          {memberInfo?.trustScore || 90}% ⭐
+                        </span>
+                      </td>
+
+                      <td className="py-3.5 px-3 text-center">
+                        {hasPaid ? (
+                          <Badge variant="success">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 size={12} /> Payé
+                            </span>
+                          </Badge>
                         ) : (
-                          <Badge variant="warning">En attente</Badge>
+                          <Badge variant="danger">
+                            <span className="flex items-center gap-1">
+                              <Clock size={12} /> En retard / Attente
+                            </span>
+                          </Badge>
                         )}
                       </td>
-                      <td className="py-3 px-2 text-right font-mono font-bold text-slate-900 dark:text-white">
-                        {formatFCFA(gm.totalContributedInGroup)}
+
+                      <td className="py-3.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                        {hasPaid ? formatFCFA(group.contributionAmount) : '0 FCFA'}
                       </td>
-                      <td className="py-3 px-2 text-right">
+
+                      <td className="py-3.5 px-3 text-right">
                         <div className="flex items-center justify-end gap-1.5">
-                          {!gm.hasPaidToday && (
+                          {!hasPaid ? (
                             <>
                               <Button
                                 variant="emerald"
@@ -405,8 +556,9 @@ export const GroupDetailPage: React.FC = () => {
                                   )
                                 }
                               >
-                                Marquer payé
+                                Valider versement
                               </Button>
+
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -416,16 +568,43 @@ export const GroupDetailPage: React.FC = () => {
                                     memberInfo?.name || ''
                                   )
                                 }
-                                title="Envoyer rappel SMS"
+                                title="Relancer via WhatsApp/SMS"
                               >
-                                <Send size={14} />
+                                <Send size={13} />
                               </Button>
                             </>
-                          )}
-                          {gm.hasPaidToday && (
-                            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
-                              <CheckCircle2 size={14} /> Validé
-                            </span>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (tx) {
+                                  handleViewReceipt(tx);
+                                } else {
+                                  // Synthesize transaction for receipt
+                                  handleViewReceipt({
+                                    id: `tx_${gm.memberId}`,
+                                    groupId: group.id,
+                                    groupName: group.name,
+                                    memberId: gm.memberId,
+                                    memberName: memberInfo?.name || '',
+                                    memberPhone: memberInfo?.phone || '',
+                                    amount: group.contributionAmount,
+                                    baseAmount: netPerMember,
+                                    commission: group.moderatorCommission,
+                                    date: new Date().toISOString(),
+                                    status: 'paid',
+                                    method: 'Orange Money',
+                                    transactionRef: `TRX-${Math.floor(100000 + Math.random() * 900000)}`,
+                                    receiptNumber: `REC-${group.id.slice(0, 4).toUpperCase()}-${gm.turnOrder}`,
+                                    verifiedByModerator: true,
+                                  });
+                                }
+                              }}
+                              leftIcon={<FileText size={13} />}
+                            >
+                              Reçu
+                            </Button>
                           )}
                         </div>
                       </td>
@@ -438,126 +617,211 @@ export const GroupDetailPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 3: CALENDAR */}
-      {activeTab === 'calendar' && (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Calendrier de rotation sur 30 jours</CardTitle>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Visualisez chaque date de versement et le récipiendaire désigné
-              </p>
+      {/* ========================================================================= */}
+      {/* TAB 3: ESPACE ADMINISTRATION DU GROUPE */}
+      {/* ========================================================================= */}
+      {activeTab === 'admin' && (
+        <div className="space-y-6">
+          {/* Quick Payout Disbursement Section */}
+          <Card className="p-5 border-emerald-500/30 bg-gradient-to-r from-emerald-50/40 dark:from-emerald-950/20 to-transparent">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Coins className="text-emerald-500" size={18} />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Versement du pot (Payout) au bénéficiaire de la session
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 max-w-xl">
+                  Vérifie automatiquement si tous les membres ont payé ({paidMembersCount}/{group.members.length} cotisations). Débloque et vire la cagnotte à {currentBeneficiary?.memberName || 'le bénéficiaire'}.
+                </p>
+              </div>
+
+              <Button
+                variant="emerald"
+                size="md"
+                onClick={() => setPayoutModalOpen(true)}
+                leftIcon={<Coins size={16} />}
+              >
+                Déclencher le Payout ({formatFCFA(paidMembersAmount)})
+              </Button>
             </div>
+          </Card>
+
+          {/* Reconfigure Turns Order */}
+          <Card className="p-5">
+            <CardHeader className="px-0 pt-0 pb-4">
+              <div>
+                <CardTitle>Reconfiguration de l'ordre des tours</CardTitle>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Ajustez les positions de rotation des membres à l'aide des boutons fléchés
+                </p>
+              </div>
+            </CardHeader>
+
+            <div className="space-y-2">
+              {group.members
+                .slice()
+                .sort((a, b) => a.turnOrder - b.turnOrder)
+                .map((gm, idx) => {
+                  const m = members.find((x) => x.id === gm.memberId);
+                  const isCurrent = gm.turnOrder === group.currentDay;
+
+                  return (
+                    <div
+                      key={gm.memberId}
+                      className={`p-3 rounded-xl border flex items-center justify-between gap-3 ${
+                        isCurrent
+                          ? 'border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/30'
+                          : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono font-bold text-xs w-6 text-slate-400">
+                          #{gm.turnOrder}
+                        </span>
+                        <Avatar name={m?.name || 'Membre'} size="sm" />
+                        <div>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white block">
+                            {m?.name}
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-mono">
+                            {m?.phone} · KYC : {m?.kycStatus || 'Vérifié'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {/* Member Presence Validation toggle */}
+                        <button
+                          onClick={() => verifyMemberPresence(group.id, gm.memberId, !gm.presenceValidated)}
+                          className={`px-2 py-1 rounded-md text-[10px] font-semibold border cursor-pointer transition-colors ${
+                            gm.presenceValidated ?? true
+                              ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/30'
+                              : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                          }`}
+                          title="Valider la présence du membre"
+                        >
+                          <ShieldCheck size={11} className="inline mr-1" />
+                          {gm.presenceValidated ?? true ? 'Présence Validée' : 'En attente présence'}
+                        </button>
+
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleMoveTurn(gm.memberId, 'up')}
+                            disabled={idx === 0}
+                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                            title="Monter la position"
+                          >
+                            <ArrowUp size={14} />
+                          </button>
+                          <button
+                            onClick={() => handleMoveTurn(gm.memberId, 'down')}
+                            disabled={idx === group.members.length - 1}
+                            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 cursor-pointer"
+                            title="Descendre la position"
+                          >
+                            <ArrowDown size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* TAB 4: CALENDRIER COMPLET */}
+      {/* ========================================================================= */}
+      {activeTab === 'calendar' && (
+        <Card className="p-5">
+          <CardHeader className="px-0 pt-0 pb-4">
+            <CardTitle>Calendrier prévisionnel de rotation</CardTitle>
           </CardHeader>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
-            {group.beneficiarySchedule.map((item) => {
-              const isToday = item.order === group.currentDay;
-              const isPast = item.order < group.currentDay;
-
-              return (
-                <div
-                  key={item.order}
-                  className={`p-3.5 rounded-xl border text-left transition-all ${
-                    isToday
-                      ? 'border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/20'
-                      : isPast
-                      ? 'border-slate-200/60 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/30 opacity-75'
-                      : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs font-mono text-slate-400 mb-1">
-                    <span>Tour #{item.order}</span>
-                    <span>{formatDate(item.scheduledDate)}</span>
-                  </div>
-
-                  <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                    {item.memberName}
-                  </h4>
-
-                  <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-baseline">
-                    <span className="text-[10px] text-slate-500">Cagnotte :</span>
-                    <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
-                      {formatFCFA(item.potAmount)}
-                    </span>
-                  </div>
-
-                  <div className="mt-1">
-                    {isToday ? (
-                      <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wide">
-                        ● Aujourd'hui
-                      </span>
-                    ) : isPast ? (
-                      <span className="text-[10px] text-slate-400">Terminé</span>
-                    ) : (
-                      <span className="text-[10px] text-amber-500">Prévu</span>
-                    )}
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
+            {group.beneficiarySchedule.map((b) => (
+              <div key={b.order} className="py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono font-bold text-xs text-slate-400">#{b.order}</span>
+                  <Avatar name={b.memberName} size="sm" />
+                  <div>
+                    <h5 className="font-bold text-xs text-slate-900 dark:text-white">{b.memberName}</h5>
+                    <span className="text-[10px] text-slate-400 font-mono">Date prévue : {formatDate(b.scheduledDate)}</span>
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="text-right">
+                  <span className="font-mono font-bold text-xs text-slate-900 dark:text-white block">
+                    {formatFCFA(b.potAmount)}
+                  </span>
+                  <Badge variant={b.status === 'completed' ? 'neutral' : b.status === 'current' ? 'success' : 'neutral'}>
+                    {b.status === 'completed' ? 'Déjà encaissé' : b.status === 'current' ? 'En cours' : 'À venir'}
+                  </Badge>
+                </div>
+              </div>
+            ))}
           </div>
         </Card>
       )}
 
-      {/* Tab 4: PAYMENTS */}
+      {/* ========================================================================= */}
+      {/* TAB 5: GRAND LIVRE DES PAIEMENTS */}
+      {/* ========================================================================= */}
       {activeTab === 'payments' && (
-        <Card>
-          <CardHeader>
-            <div>
-              <CardTitle>Historique des paiements ({groupPayments.length})</CardTitle>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Toutes les cotisations reçues et vérifiées pour ce groupe
-              </p>
+        <Card className="p-5">
+          <CardHeader className="px-0 pt-0 pb-4">
+            <div className="flex items-center justify-between w-full">
+              <div>
+                <CardTitle>Grand Livre des Paiements ({groupPayments.length})</CardTitle>
+                <p className="text-xs text-slate-500">Traçabilité complète et reçus officiels</p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRecordModalOpen(true)}
+                leftIcon={<CreditCard size={14} />}
+              >
+                Nouveau versement
+              </Button>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setRecordModalOpen(true)}
-              leftIcon={<CreditCard size={15} />}
-            >
-              Nouveau versement
-            </Button>
           </CardHeader>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold">
-                  <th className="pb-3 px-2">Réf</th>
-                  <th className="pb-3 px-2">Date</th>
-                  <th className="pb-3 px-2">Membre</th>
-                  <th className="pb-3 px-2">Moyen</th>
-                  <th className="pb-3 px-2 text-right">Montant</th>
-                  <th className="pb-3 px-2 text-right">Commission</th>
-                  <th className="pb-3 px-2 text-center">Statut</th>
+                <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 font-semibold uppercase tracking-wider text-[10px]">
+                  <th className="pb-3 px-3">Réf. TxID</th>
+                  <th className="pb-3 px-3">Date</th>
+                  <th className="pb-3 px-3">Membre</th>
+                  <th className="pb-3 px-3">Moyen</th>
+                  <th className="pb-3 px-3 text-right">Montant</th>
+                  <th className="pb-3 px-3 text-center">Statut</th>
+                  <th className="pb-3 px-3 text-right">Preuve</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {groupPayments.map((p) => (
                   <tr key={p.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                    <td className="py-3 px-2 font-mono text-slate-400">
-                      {p.transactionRef}
-                    </td>
-                    <td className="py-3 px-2 text-slate-500 font-mono">
-                      {formatDateTime(p.date)}
-                    </td>
-                    <td className="py-3 px-2 font-medium text-slate-900 dark:text-white">
-                      {p.memberName}
-                    </td>
-                    <td className="py-3 px-2 text-slate-600 dark:text-slate-300">
-                      {p.method}
-                    </td>
-                    <td className="py-3 px-2 text-right font-mono font-bold text-slate-900 dark:text-white">
+                    <td className="py-3 px-3 font-mono text-slate-500">{p.transactionRef}</td>
+                    <td className="py-3 px-3 font-mono text-slate-500">{formatDateTime(p.date)}</td>
+                    <td className="py-3 px-3 font-medium text-slate-900 dark:text-white">{p.memberName}</td>
+                    <td className="py-3 px-3 text-slate-600 dark:text-slate-300">{p.method}</td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
                       {formatFCFA(p.amount)}
                     </td>
-                    <td className="py-3 px-2 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
-                      +{formatFCFA(p.commission)}
-                    </td>
-                    <td className="py-3 px-2 text-center">
+                    <td className="py-3 px-3 text-center">
                       <Badge variant={p.status === 'paid' ? 'success' : 'warning'}>
-                        {p.status === 'paid' ? 'Payé' : 'En attente'}
+                        {p.status === 'paid' ? 'Validé' : 'En attente'}
                       </Badge>
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <Button variant="ghost" size="sm" onClick={() => handleViewReceipt(p)}>
+                        <FileText size={14} className="text-emerald-600" /> Reçu
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -567,49 +831,28 @@ export const GroupDetailPage: React.FC = () => {
         </Card>
       )}
 
-      {/* Tab 5: SETTINGS */}
+      {/* ========================================================================= */}
+      {/* TAB 6: SETTINGS */}
+      {/* ========================================================================= */}
       {activeTab === 'settings' && (
-        <Card className="max-w-xl">
-          <CardHeader>
-            <div>
-              <CardTitle>Paramètres de la tontine</CardTitle>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Modifier les règles ou archiver ce groupe
-              </p>
-            </div>
+        <Card className="max-w-xl p-5">
+          <CardHeader className="px-0 pt-0 pb-4">
+            <CardTitle>Paramètres de la tontine</CardTitle>
           </CardHeader>
 
           <div className="space-y-4 text-xs">
-            <Input
-              label="Nom du groupe"
-              defaultValue={group.name}
-            />
-
-            <Input
-              label="Montant cotisation par tour (FCFA)"
-              type="number"
-              defaultValue={group.contributionAmount}
-            />
-
-            <Input
-              label="Commission modérateur (FCFA)"
-              type="number"
-              defaultValue={group.moderatorCommission}
-            />
+            <Input label="Nom de la tontine" defaultValue={group.name} />
+            <Input label="Montant par cotisation (FCFA)" type="number" defaultValue={group.contributionAmount} />
+            <Input label="Commission modérateur (FCFA)" type="number" defaultValue={group.moderatorCommission} />
 
             <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
               <div>
-                <h4 className="font-bold text-rose-600 text-xs">Zone de danger</h4>
-                <p className="text-[11px] text-slate-400">Archiver ou clôturer définitivement ce groupe</p>
+                <h4 className="font-bold text-rose-600 text-xs">Archiver ce groupe</h4>
+                <p className="text-[11px] text-slate-400">Retirer cette tontine de la liste active</p>
               </div>
 
-              <Button
-                variant="danger"
-                size="sm"
-                onClick={handleArchive}
-                leftIcon={<Archive size={14} />}
-              >
-                Archiver le groupe
+              <Button variant="danger" size="sm" onClick={handleArchive} leftIcon={<Archive size={14} />}>
+                Archiver
               </Button>
             </div>
           </div>
@@ -629,6 +872,27 @@ export const GroupDetailPage: React.FC = () => {
         onClose={() => setInviteModalOpen(false)}
         groupId={group.id}
         groupName={group.name}
+      />
+
+      <PayoutPotModal
+        isOpen={payoutModalOpen}
+        onClose={() => setPayoutModalOpen(false)}
+        group={group}
+      />
+
+      <WebhookSimulatorModal
+        isOpen={webhookModalOpen}
+        onClose={() => setWebhookModalOpen(false)}
+        defaultGroupId={group.id}
+      />
+
+      <ReceiptModal
+        isOpen={receiptModalOpen}
+        onClose={() => {
+          setReceiptModalOpen(false);
+          setSelectedTxForReceipt(null);
+        }}
+        transaction={selectedTxForReceipt}
       />
     </div>
   );

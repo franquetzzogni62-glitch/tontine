@@ -131,6 +131,10 @@ export const CreateGroupPage: React.FC = () => {
     const newGroup = await addGroup({
       name: name || 'Nouvelle Tontine Express',
       description: description || 'Tontine rotative d\'épargne collective.',
+      type: 'rotative',
+      drawDay: 'Tous les jours à 18h',
+      potAmount: netPotAmount,
+      nextTurnDate: startDate,
       moderatorId: currentUser.id,
       contributionAmount: Number(contributionAmount),
       moderatorCommission: calculatedCommission,

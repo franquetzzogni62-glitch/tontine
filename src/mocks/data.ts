@@ -3,10 +3,15 @@ import { User, Member, TontineGroup, PaymentTransaction, AppNotification } from 
 export const CURRENT_MODERATOR: User = {
   id: 'user_mod_1',
   name: 'Mme Claire Mballa',
+  firstName: 'Claire',
+  lastName: 'Mballa',
   email: 'claire.mballa@tontiflow.africa',
   phone: '+237 6 99 45 22 10',
+  whatsappNumber: '+237 6 99 45 22 10',
   avatarUrl: '/src/assets/images/avatar_claire_moderator_1790600689069.jpg',
   role: 'moderator',
+  trustScore: 100,
+  kycStatus: 'verified',
   city: 'Douala',
   country: 'Cameroun',
 };
@@ -14,14 +19,19 @@ export const CURRENT_MODERATOR: User = {
 export const CURRENT_MEMBER: User = {
   id: 'mem_2',
   name: 'Amadou Bello',
+  firstName: 'Amadou',
+  lastName: 'Bello',
   email: 'amadou.bello@gmail.com',
   phone: '+237 6 75 12 34 56',
+  whatsappNumber: '+237 6 75 12 34 56',
   role: 'member',
+  trustScore: 96,
+  kycStatus: 'verified',
   city: 'Garoua',
   country: 'Cameroun',
 };
 
-export const MOCK_MEMBERS: Member[] = [
+const RAW_MEMBERS = [
   {
     id: 'mem_1',
     name: 'Mélanie Ngo Bassong',
@@ -288,6 +298,21 @@ export const MOCK_MEMBERS: Member[] = [
   },
 ];
 
+export const MOCK_MEMBERS: Member[] = RAW_MEMBERS.map((m) => {
+  const parts = m.name.split(' ');
+  const firstName = parts[0] || m.name;
+  const lastName = parts.slice(1).join(' ') || '';
+  const kycStatus = (m.trustScore >= 92 ? 'verified' : m.trustScore >= 80 ? 'pending' : 'unverified') as any;
+  return {
+    ...m,
+    status: m.status as any,
+    firstName,
+    lastName,
+    kycStatus,
+    presenceValidated: true,
+  };
+});
+
 // Helper to generate schedule
 function generateSchedule(
   membersList: { id: string; name: string; phone: string }[],
@@ -320,7 +345,7 @@ function generateSchedule(
 }
 
 // 5 Realistic Groups
-export const MOCK_GROUPS: TontineGroup[] = [
+const RAW_GROUPS = [
   {
     id: 'grp_1',
     name: 'Tontine Mélanie - Express Akwa',
@@ -516,6 +541,23 @@ export const MOCK_GROUPS: TontineGroup[] = [
     ],
   },
 ];
+
+export const MOCK_GROUPS: TontineGroup[] = RAW_GROUPS.map((g) => {
+  const type = (g.id === 'grp_4' ? 'sociale' : 'rotative') as any;
+  const drawDay = g.frequency === 'weekly' ? 'Chaque Samedi' : 'Tous les jours';
+  const potAmount = (g.contributionAmount - g.moderatorCommission) * g.totalMembersCount;
+  return {
+    ...g,
+    commissionType: g.commissionType as 'fixed' | 'percentage',
+    frequency: g.frequency as any,
+    status: g.status as any,
+    beneficiarySchedule: g.beneficiarySchedule as any,
+    type,
+    drawDay,
+    potAmount,
+    nextTurnDate: '2026-09-29',
+  };
+});
 
 // Generate 110 realistic transactions over 30 days
 export function generateMockTransactions(): PaymentTransaction[] {

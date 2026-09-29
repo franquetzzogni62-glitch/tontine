@@ -5,10 +5,54 @@ export const apiRouter = Router();
 
 // Health check
 apiRouter.get('/health', (req: Request, res: Response) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    service: 'TontiFlow API - Tontine Africaine Digitalisée',
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// --- Auth Routes ---
+// ==========================================
+// --- USERS & AUTH ---
+// ==========================================
+
+apiRouter.get('/users', (req: Request, res: Response) => {
+  res.json(db.getUsers());
+});
+
+apiRouter.get('/users/:id', (req: Request, res: Response) => {
+  const user = db.getUserById(req.params.id);
+  if (!user) {
+    return res.status(404).json({ error: 'Utilisateur non trouvé' });
+  }
+  res.json(user);
+});
+
+apiRouter.put('/users/:id/kyc', (req: Request, res: Response) => {
+  const { kycStatus } = req.body;
+  if (!kycStatus || !['unverified', 'pending', 'verified'].includes(kycStatus)) {
+    return res.status(400).json({ error: 'Statut KYC invalide (unverified, pending, verified)' });
+  }
+  const updated = db.updateKycStatus(req.params.id, kycStatus);
+  if (!updated) {
+    return res.status(404).json({ error: 'Utilisateur non trouvé' });
+  }
+  res.json({ success: true, user: updated });
+});
+
+apiRouter.put('/users/:id/trust-score', (req: Request, res: Response) => {
+  const { trustScore } = req.body;
+  if (typeof trustScore !== 'number') {
+    return res.status(400).json({ error: 'Score de confiance numérique requis (0-100)' });
+  }
+  const updated = db.updateTrustScore(req.params.id, trustScore);
+  if (!updated) {
+    return res.status(404).json({ error: 'Utilisateur non trouvé' });
+  }
+  res.json({ success: true, user: updated });
+});
+
 apiRouter.get('/auth/users', (req: Request, res: Response) => {
   res.json(db.getUsers());
 });
@@ -30,65 +74,183 @@ apiRouter.post('/auth/register', (req: Request, res: Response) => {
     name: name || 'Utilisateur TontiFlow',
     email: email || `user_${Date.now()}@tontiflow.africa`,
     phone: phone || '+237 6 00 00 00 00',
+    whatsappNumber: phone || '+237 6 00 00 00 00',
     role: role || 'moderator',
+    trustScore: 100,
+    kycStatus: 'pending',
     city: city || 'Douala',
     country: country || 'Cameroun',
   });
   res.status(201).json({ success: true, user: newUser });
 });
 
-// --- Groups Routes ---
-apiRouter.get('/groups', (req: Request, res: Response) => {
-  const { status } = req.query;
+// ==========================================
+// --- TONTINES / GROUPS ROUTES ---
+// (Supported on both /tontines and /groups)
+// ==========================================
+
+const handleGetGroups = (req: Request, res: Response) => {
+  const { status, type } = req.query;
   let groups = db.getGroups();
   if (status && typeof status === 'string' && status !== 'all') {
     groups = groups.filter((g) => g.status === status);
   }
+  if (type && typeof type === 'string' && type !== 'all') {
+    groups = groups.filter((g) => g.type === type);
+  }
   res.json(groups);
-});
+};
 
-apiRouter.get('/groups/:id', (req: Request, res: Response) => {
+const handleGetGroupById = (req: Request, res: Response) => {
   const group = db.getGroupById(req.params.id);
   if (!group) {
-    return res.status(404).json({ error: 'Groupe non trouvé' });
+    return res.status(404).json({ error: 'Tontine introuvable' });
   }
   res.json(group);
-});
+};
 
-apiRouter.post('/groups', (req: Request, res: Response) => {
+const handleCreateGroup = (req: Request, res: Response) => {
   try {
     const newGroup = db.createGroup(req.body);
     res.status(201).json(newGroup);
   } catch (err: any) {
-    res.status(400).json({ error: err.message || 'Erreur lors de la création du groupe' });
+    res.status(400).json({ error: err.message || 'Erreur lors de la création de la tontine' });
   }
-});
+};
 
-apiRouter.put('/groups/:id', (req: Request, res: Response) => {
+const handleUpdateGroup = (req: Request, res: Response) => {
   const updated = db.updateGroup(req.params.id, req.body);
   if (!updated) {
-    return res.status(404).json({ error: 'Groupe non trouvé' });
+    return res.status(404).json({ error: 'Tontine introuvable' });
   }
   res.json(updated);
-});
+};
 
-apiRouter.delete('/groups/:id', (req: Request, res: Response) => {
+const handleDeleteGroup = (req: Request, res: Response) => {
   const deleted = db.deleteGroup(req.params.id);
   if (!deleted) {
-    return res.status(404).json({ error: 'Groupe non trouvé' });
+    return res.status(404).json({ error: 'Tontine introuvable' });
   }
-  res.json({ success: true, message: 'Groupe supprimé avec succès' });
-});
+  res.json({ success: true, message: 'Tontine archivée avec succès' });
+};
 
-apiRouter.post('/groups/:id/advance', (req: Request, res: Response) => {
+// Check pot funding status
+const handleGetPotStatus = (req: Request, res: Response) => {
+  const report = db.checkPotFundedStatus(req.params.id);
+  if (!report) {
+    return res.status(404).json({ error: 'Tontine introuvable' });
+  }
+  res.json(report);
+};
+
+// Financial Summary with 5% SaaS commission
+const handleGetTontineSummary = (req: Request, res: Response) => {
+  const groupId = req.params.groupId || req.params.id;
+  if (!groupId) {
+    return res.status(400).json({ error: 'Identifiant du groupe de tontine requis' });
+  }
+  const summary = db.getTontineSummary(groupId);
+  if (!summary) {
+    return res.status(404).json({ error: 'Tontine introuvable' });
+  }
+  res.json(summary);
+};
+
+// Payout pot disbursement with 5% SaaS commission calculation
+const handleProcessTontinePayout = (req: Request, res: Response) => {
+  try {
+    const groupId = req.body.groupId || req.params.id;
+    const roundId = req.body.roundId ? Number(req.body.roundId) : undefined;
+    const { force, notes, operator } = req.body;
+
+    if (!groupId) {
+      return res.status(400).json({ error: 'Le champ groupId est requis' });
+    }
+
+    const result = db.processTontinePayout(groupId, roundId, {
+      force: Boolean(force),
+      operator: operator || 'Orange Money',
+      notes,
+    });
+    res.json(result);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erreur lors du versement du pot' });
+  }
+};
+
+const handlePayoutPot = handleProcessTontinePayout;
+
+// Advance round
+const handleAdvanceRound = (req: Request, res: Response) => {
   const updated = db.advanceGroupRound(req.params.id);
   if (!updated) {
-    return res.status(404).json({ error: 'Groupe non trouvé' });
+    return res.status(404).json({ error: 'Tontine introuvable' });
   }
   res.json({ success: true, group: updated });
-});
+};
 
-// --- Members Routes ---
+// Reorder turns
+const handleReorderTurns = (req: Request, res: Response) => {
+  try {
+    const { turns } = req.body; // array of { memberId, order }
+    if (!Array.isArray(turns)) {
+      return res.status(400).json({ error: 'Le champ turns (tableau) est requis' });
+    }
+    const updated = db.reorderTurns(req.params.id, turns);
+    res.json({ success: true, group: updated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erreur réorganisation des tours' });
+  }
+};
+
+// Verify member presence / approval
+const handleVerifyMemberPresence = (req: Request, res: Response) => {
+  try {
+    const { memberId, presenceValidated } = req.body;
+    if (!memberId) {
+      return res.status(400).json({ error: 'Le champ memberId est requis' });
+    }
+    const updated = db.verifyMemberPresence(req.params.id, memberId, presenceValidated ?? true);
+    res.json({ success: true, group: updated });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erreur validation de présence' });
+  }
+};
+
+// Direct routes required for 5% SaaS commission:
+apiRouter.post('/tontine/payout', handleProcessTontinePayout);
+apiRouter.get('/tontine/summary/:groupId', handleGetTontineSummary);
+
+// Bind /tontines
+apiRouter.get('/tontines', handleGetGroups);
+apiRouter.get('/tontines/:id', handleGetGroupById);
+apiRouter.post('/tontines', handleCreateGroup);
+apiRouter.put('/tontines/:id', handleUpdateGroup);
+apiRouter.delete('/tontines/:id', handleDeleteGroup);
+apiRouter.get('/tontines/:id/summary', handleGetTontineSummary);
+apiRouter.get('/tontines/:id/pot-status', handleGetPotStatus);
+apiRouter.post('/tontines/:id/payout', handleProcessTontinePayout);
+apiRouter.post('/tontines/:id/advance', handleAdvanceRound);
+apiRouter.put('/tontines/:id/reorder-turns', handleReorderTurns);
+apiRouter.put('/tontines/:id/members/verify', handleVerifyMemberPresence);
+
+// Bind aliases /groups
+apiRouter.get('/groups', handleGetGroups);
+apiRouter.get('/groups/:id', handleGetGroupById);
+apiRouter.post('/groups', handleCreateGroup);
+apiRouter.put('/groups/:id', handleUpdateGroup);
+apiRouter.delete('/groups/:id', handleDeleteGroup);
+apiRouter.get('/groups/:id/summary', handleGetTontineSummary);
+apiRouter.get('/groups/:id/pot-status', handleGetPotStatus);
+apiRouter.post('/groups/:id/payout', handleProcessTontinePayout);
+apiRouter.post('/groups/:id/advance', handleAdvanceRound);
+apiRouter.put('/groups/:id/reorder-turns', handleReorderTurns);
+apiRouter.put('/groups/:id/members/verify', handleVerifyMemberPresence);
+
+// ==========================================
+// --- MEMBERS ROUTES ---
+// ==========================================
+
 apiRouter.get('/members', (req: Request, res: Response) => {
   res.json(db.getMembers());
 });
@@ -126,7 +288,10 @@ apiRouter.delete('/members/:id', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// --- Payments Routes ---
+// ==========================================
+// --- PAYMENTS & WEBHOOKS ---
+// ==========================================
+
 apiRouter.get('/payments', (req: Request, res: Response) => {
   const { groupId, memberId, status } = req.query;
   const payments = db.getPayments({
@@ -154,7 +319,107 @@ apiRouter.put('/payments/:id/verify', (req: Request, res: Response) => {
   res.json(verified);
 });
 
-// --- Notifications Routes ---
+// Receipt fetch
+apiRouter.get('/payments/:id/receipt', (req: Request, res: Response) => {
+  const payments = db.getPayments();
+  const tx = payments.find((p) => p.id === req.params.id || p.transactionRef === req.params.id || p.receiptNumber === req.params.id);
+  if (!tx) {
+    return res.status(404).json({ error: 'Reçu non trouvé' });
+  }
+  res.json({
+    receiptNumber: tx.receiptNumber || `REC-${tx.transactionRef}`,
+    transactionRef: tx.transactionRef,
+    date: tx.date,
+    amount: tx.amount,
+    baseAmount: tx.baseAmount,
+    commission: tx.commission,
+    method: tx.method,
+    memberName: tx.memberName,
+    memberPhone: tx.memberPhone,
+    groupName: tx.groupName,
+    status: tx.status,
+    verifiedByModerator: tx.verifiedByModerator,
+    issuedBy: 'TontiFlow Digital Platform',
+    digitalSeal: `TF-SEAL-${Math.random().toString(36).substring(2, 10).toUpperCase()}`,
+  });
+});
+
+/**
+ * Real Mobile Money Webhook Endpoint
+ * Supports callbacks from Orange Money, MTN MoMo, Wave
+ */
+apiRouter.post('/payments/webhook', (req: Request, res: Response) => {
+  try {
+    const { transaction_id, status, operator, phone_number, amount, external_ref } = req.body;
+
+    const result = db.processWebhook({
+      transactionId: transaction_id,
+      status: status === 'SUCCESS' || status === 'completed' || status === 'PAID' ? 'completed' : 'failed',
+      operator: operator || 'Mobile Money',
+      phoneNumber: phone_number,
+      amount: amount ? Number(amount) : undefined,
+      providerTxId: external_ref,
+    });
+
+    res.json({
+      received: true,
+      processed: result.success,
+      transactionId: result.transaction.id,
+      receiptNumber: result.receiptNumber,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erreur traitement webhook' });
+  }
+});
+
+/**
+ * Webhook Simulation Endpoint (for testing without live credentials)
+ * Required by user: POST /api/payments/webhook-test
+ */
+apiRouter.post('/payments/webhook-test', (req: Request, res: Response) => {
+  try {
+    const {
+      transactionId,
+      groupId,
+      memberId,
+      amount,
+      operator = 'MTN MoMo',
+      phoneNumber,
+      status = 'completed',
+    } = req.body;
+
+    const result = db.processWebhook({
+      transactionId,
+      groupId,
+      memberId,
+      amount: amount ? Number(amount) : undefined,
+      operator,
+      phoneNumber,
+      status: status === 'failed' ? 'failed' : 'completed',
+    });
+
+    res.json({
+      simulation: true,
+      success: result.success,
+      operator,
+      transaction: result.transaction,
+      receiptNumber: result.receiptNumber,
+      groupReport: result.groupReport,
+      message:
+        result.success
+          ? `Webhook de test exécuté avec succès : Cotisation de ${result.transaction.amount.toLocaleString()} FCFA validée via ${operator}.`
+          : `Webhook de test simulé en échec.`,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message || 'Erreur simulateur webhook' });
+  }
+});
+
+// ==========================================
+// --- NOTIFICATIONS & STATS ---
+// ==========================================
+
 apiRouter.get('/notifications', (req: Request, res: Response) => {
   res.json(db.getNotifications());
 });
@@ -169,7 +434,6 @@ apiRouter.put('/notifications/read-all', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
-// --- Stats Routes ---
 apiRouter.get('/stats/overview', (req: Request, res: Response) => {
   res.json(db.getStatsOverview());
 });

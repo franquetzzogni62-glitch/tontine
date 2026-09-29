@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Menu, Sun, Moon, Bell, Check, ArrowRightLeft, Sparkles } from 'lucide-react';
+import { Menu, Sun, Moon, Bell, Check, ArrowRightLeft, Sparkles, Zap } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { formatDateTime } from '../../utils/formatters';
+import { WebhookSimulatorModal } from '../modals/WebhookSimulatorModal';
 
 interface TopbarProps {
   onOpenSidebar: () => void;
@@ -29,6 +30,7 @@ export const Topbar: React.FC<TopbarProps> = ({
   } = useApp();
 
   const [notifOpen, setNotifOpen] = useState(false);
+  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -73,6 +75,16 @@ export const Topbar: React.FC<TopbarProps> = ({
       {/* Right zone: Actions, notifications, theme toggle, profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         {action && <div className="hidden sm:block">{action}</div>}
+
+        {/* Webhook Simulator trigger */}
+        <button
+          onClick={() => setWebhookModalOpen(true)}
+          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-colors cursor-pointer"
+          title="Simuler un Webhook Mobile Money entrant"
+        >
+          <Zap size={13} className="text-amber-500" />
+          <span>Simulateur Webhook</span>
+        </button>
 
         {/* Backend live indicator */}
         <div
@@ -199,6 +211,11 @@ export const Topbar: React.FC<TopbarProps> = ({
           </div>
         </div>
       </div>
+
+      <WebhookSimulatorModal
+        isOpen={webhookModalOpen}
+        onClose={() => setWebhookModalOpen(false)}
+      />
     </header>
   );
 };

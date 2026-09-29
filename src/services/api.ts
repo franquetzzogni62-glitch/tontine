@@ -1,4 +1,14 @@
-import { TontineGroup, Member, PaymentTransaction, AppNotification, User } from '../types';
+import {
+  TontineGroup,
+  Member,
+  PaymentTransaction,
+  PayoutTransaction,
+  TontineFinancialSummary,
+  AppNotification,
+  User,
+  KycStatus,
+  WebhookSimulationPayload,
+} from '../types';
 
 const BASE_URL = '/api';
 
@@ -11,7 +21,12 @@ async function handleResponse<T>(res: Response): Promise<T> {
 }
 
 export const api = {
-  // Auth
+  // Auth & Users
+  async getUsers(): Promise<User[]> {
+    const res = await fetch(`${BASE_URL}/users`);
+    return handleResponse(res);
+  },
+
   async login(email: string, role?: string): Promise<{ success: boolean; user: User }> {
     const res = await fetch(`${BASE_URL}/auth/login`, {
       method: 'POST',
@@ -30,20 +45,42 @@ export const api = {
     return handleResponse(res);
   },
 
-  // Groups
-  async getGroups(status?: string): Promise<TontineGroup[]> {
-    const query = status && status !== 'all' ? `?status=${encodeURIComponent(status)}` : '';
-    const res = await fetch(`${BASE_URL}/groups${query}`);
+  async updateKycStatus(userId: string, kycStatus: KycStatus): Promise<{ success: boolean; user: User }> {
+    const res = await fetch(`${BASE_URL}/users/${userId}/kyc`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kycStatus }),
+    });
+    return handleResponse(res);
+  },
+
+  async updateTrustScore(userId: string, trustScore: number): Promise<{ success: boolean; user: User }> {
+    const res = await fetch(`${BASE_URL}/users/${userId}/trust-score`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ trustScore }),
+    });
+    return handleResponse(res);
+  },
+
+  // Groups / Tontines
+  async getGroups(status?: string, type?: string): Promise<TontineGroup[]> {
+    const params = new URLSearchParams();
+    if (status && status !== 'all') params.append('status', status);
+    if (type && type !== 'all') params.append('type', type);
+    const query = params.toString() ? `?${params.toString()}` : '';
+
+    const res = await fetch(`${BASE_URL}/tontines${query}`);
     return handleResponse(res);
   },
 
   async getGroup(id: string): Promise<TontineGroup> {
-    const res = await fetch(`${BASE_URL}/groups/${id}`);
+    const res = await fetch(`${BASE_URL}/tontines/${id}`);
     return handleResponse(res);
   },
 
   async createGroup(groupData: Omit<TontineGroup, 'id'>): Promise<TontineGroup> {
-    const res = await fetch(`${BASE_URL}/groups`, {
+    const res = await fetch(`${BASE_URL}/tontines`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(groupData),
@@ -52,7 +89,7 @@ export const api = {
   },
 
   async updateGroup(id: string, updates: Partial<TontineGroup>): Promise<TontineGroup> {
-    const res = await fetch(`${BASE_URL}/groups/${id}`, {
+    const res = await fetch(`${BASE_URL}/tontines/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -61,16 +98,95 @@ export const api = {
   },
 
   async deleteGroup(id: string): Promise<{ success: boolean }> {
-    const res = await fetch(`${BASE_URL}/groups/${id}`, {
+    const res = await fetch(`${BASE_URL}/tontines/${id}`, {
       method: 'DELETE',
     });
     return handleResponse(res);
   },
 
-  async advanceGroupRound(id: string): Promise<{ success: boolean; group: TontineGroup }> {
-    const res = await fetch(`${BASE_URL}/groups/${id}/advance`, {
+  async getPotStatus(groupId: string) {
+    const res = await fetch(`${BASE_URL}/tontines/${groupId}/pot-status`);
+    return handleResponse(res);
+  },
+
+  /**
+   * Récupère le résumé financier du tour actuel avec la commission SaaS de 5%
+   * Route requise: GET /api/tontine/summary/:groupId
+   */
+  async getTontineSummary(groupId: string): Promise<TontineFinancialSummary> {
+    const res = await fetch(`${BASE_URL}/tontine/summary/${groupId}`);
+    return handleResponse<TontineFinancialSummary>(res);
+  },
+
+  /**
+   * Exécute le versement (Payout) avec déduction de la commission de 5%
+   * et simulation Mobile Money
+   * Route requise: POST /api/tontine/payout
+   */
+  async processTontinePayout(payload: {
+    groupId: string;
+    roundId?: number;
+    operator?: string;
+    force?: boolean;
+    notes?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    payout: PayoutTransaction;
+    summary: TontineFinancialSummary;
+    updatedGroup: TontineGroup;
+    simulatedPayoutCall: any;
+    payoutRef: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/tontine/payout`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+  },
+
+  async payoutPot(
+    groupId: string,
+    options?: { force?: boolean; notes?: string; operator?: string }
+  ): Promise<{
+    success: boolean;
+    message: string;
+    report: any;
+    updatedGroup: TontineGroup;
+    payoutRef: string;
+    payout?: PayoutTransaction;
+  }> {
+    const res = await fetch(`${BASE_URL}/tontine/payout`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId, ...(options || {}) }),
+    });
+    return handleResponse(res);
+  },
+
+  async advanceGroupRound(id: string): Promise<{ success: boolean; group: TontineGroup }> {
+    const res = await fetch(`${BASE_URL}/tontines/${id}/advance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse(res);
+  },
+
+  async reorderTurns(groupId: string, turns: { memberId: string; order: number }[]): Promise<{ success: boolean; group: TontineGroup }> {
+    const res = await fetch(`${BASE_URL}/tontines/${groupId}/reorder-turns`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turns }),
+    });
+    return handleResponse(res);
+  },
+
+  async verifyMemberPresence(groupId: string, memberId: string, presenceValidated = true): Promise<{ success: boolean; group: TontineGroup }> {
+    const res = await fetch(`${BASE_URL}/tontines/${groupId}/members/verify`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ memberId, presenceValidated }),
     });
     return handleResponse(res);
   },
@@ -136,6 +252,29 @@ export const api = {
     const res = await fetch(`${BASE_URL}/payments/${id}/verify`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse(res);
+  },
+
+  async getReceipt(id: string) {
+    const res = await fetch(`${BASE_URL}/payments/${id}/receipt`);
+    return handleResponse(res);
+  },
+
+  // Webhooks
+  async simulateWebhook(payload: WebhookSimulationPayload): Promise<{
+    simulation: boolean;
+    success: boolean;
+    operator: string;
+    transaction: PaymentTransaction;
+    receiptNumber: string;
+    groupReport: any;
+    message: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/payments/webhook-test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
     });
     return handleResponse(res);
   },

@@ -107,7 +107,8 @@ export const GroupsPage: React.FC = () => {
             );
             const totalPot = (group.contributionAmount - group.moderatorCommission) * group.totalMembersCount;
 
-            const statusBadges = {
+            const statusBadges: Record<string, React.ReactNode> = {
+              created: <Badge variant="warning">Créé · En attente</Badge>,
               active: <Badge variant="success">Actif · En cours</Badge>,
               pending: <Badge variant="warning">En attente de démarrage</Badge>,
               completed: <Badge variant="neutral">Cycle achevé</Badge>,

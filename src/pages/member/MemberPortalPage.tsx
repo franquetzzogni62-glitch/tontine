@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
@@ -7,7 +7,9 @@ import { Badge } from '../../components/ui/Badge';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Avatar } from '../../components/ui/Avatar';
 import { MemberPayModal } from '../../components/modals/MemberPayModal';
-import { TontineGroup } from '../../types';
+import { ReceiptModal } from '../../components/modals/ReceiptModal';
+import { WebhookSimulatorModal } from '../../components/modals/WebhookSimulatorModal';
+import { TontineGroup, PaymentTransaction } from '../../types';
 import {
   Sparkles,
   Smartphone,
@@ -22,6 +24,11 @@ import {
   TrendingUp,
   Award,
   Wallet,
+  Zap,
+  FileText,
+  ShieldCheck,
+  AlertCircle,
+  Coins,
 } from 'lucide-react';
 import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
 
@@ -30,20 +37,49 @@ export const MemberPortalPage: React.FC = () => {
 
   const [selectedGroupToPay, setSelectedGroupToPay] = useState<TontineGroup | null>(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
+  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
+  const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<PaymentTransaction | null>(null);
+
+  // Live countdown timer towards end of day / next round draw
+  const [countdown, setCountdown] = useState({ hours: 4, minutes: 28, seconds: 45 });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev.seconds > 0) return { ...prev, seconds: prev.seconds - 1 };
+        if (prev.minutes > 0) return { ...prev, minutes: prev.minutes - 1, seconds: 59 };
+        if (prev.hours > 0) return { hours: prev.hours - 1, minutes: 59, seconds: 59 };
+        return { hours: 23, minutes: 59, seconds: 59 };
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Find groups where this user is participating
   const myGroups = groups.filter((g) =>
     g.members.some((m) => m.memberId === currentUser.id || m.memberId === 'mem_2')
   );
 
-  // Fallback to first two active groups if newly created user
   const displayGroups = myGroups.length > 0 ? myGroups : groups.slice(0, 2);
 
-  // Find user's turn in first group
-  const primaryGroup = displayGroups[0];
-  const myTurnInfo = primaryGroup?.beneficiarySchedule.find(
-    (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
-  );
+  // Check if it's "MY TURN" in any of the groups
+  const myActivePotTurn = displayGroups.find((g) => {
+    const myTurn = g.beneficiarySchedule.find(
+      (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
+    );
+    return myTurn && myTurn.order === g.currentDay && myTurn.status !== 'completed';
+  });
+
+  const myTurnInfo = myActivePotTurn
+    ? myActivePotTurn.beneficiarySchedule.find(
+        (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
+      )
+    : displayGroups[0]?.beneficiarySchedule.find(
+        (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
+      );
+
+  const primaryGroup = myActivePotTurn || displayGroups[0];
 
   const myPayments = payments.filter(
     (p) => p.memberId === currentUser.id || p.memberId === 'mem_2'
@@ -58,6 +94,11 @@ export const MemberPortalPage: React.FC = () => {
     setPayModalOpen(true);
   };
 
+  const handleOpenReceipt = (tx: PaymentTransaction) => {
+    setSelectedTxForReceipt(tx);
+    setReceiptModalOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col pb-20">
       {/* Top Mobile-First Header */}
@@ -68,21 +109,35 @@ export const MemberPortalPage: React.FC = () => {
             <h2 className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
               {currentUser.name}
             </h2>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-              <Award size={11} /> Score de confiance : 96%
-            </span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                <Award size={11} /> Score : {currentUser.trustScore || 96}%
+              </span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-600 font-bold border border-emerald-500/20">
+                KYC Vérifié
+              </span>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Webhook test quick modal */}
+          <button
+            onClick={() => setWebhookModalOpen(true)}
+            className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-500/10 transition-colors cursor-pointer"
+            title="Tester le Webhook Mobile Money"
+          >
+            <Zap size={16} />
+          </button>
+
           {/* Quick role toggle */}
           <button
             onClick={() => switchRole(currentUser.role === 'moderator' ? 'member' : 'moderator')}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors cursor-pointer"
-            title="Passer en vue modérateur"
+            title="Passer en vue administrateur"
           >
             <ArrowRightLeft size={13} className="text-emerald-500" />
-            <span className="hidden sm:inline">Vue</span> Modérateur
+            <span className="hidden sm:inline">Vue</span> Admin
           </button>
 
           <button
@@ -97,8 +152,46 @@ export const MemberPortalPage: React.FC = () => {
 
       {/* Main Container */}
       <main className="flex-1 max-w-xl w-full mx-auto p-4 space-y-5 text-left">
-        {/* Next Pot Banner (Card with big countdown & reward) */}
-        {myTurnInfo && (
+        {/* ========================================================================= */}
+        {/* SPECIAL HIGHLIGHT BANNER: C'EST MON TOUR DE RECEVOIR LE POT ! */}
+        {/* ========================================================================= */}
+        {myActivePotTurn ? (
+          <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-emerald-600 text-white shadow-xl shadow-amber-500/20 relative overflow-hidden animate-pulse">
+            <div className="relative z-10 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-wider bg-white/25 px-2.5 py-0.5 rounded-full backdrop-blur-xs">
+                  <Sparkles size={14} /> C'est Mon Tour de recevoir le pot !
+                </span>
+                <span className="font-mono text-xs text-white/90">
+                  {myActivePotTurn.name}
+                </span>
+              </div>
+
+              <div>
+                <p className="text-xs text-white/90 font-medium">Montant net de votre cagnotte à encaisser :</p>
+                <div className="text-3xl sm:text-4xl font-black font-mono tracking-tight mt-0.5">
+                  {formatFCFA(Math.round((myTurnInfo?.potAmount || 250000) * 0.95))}
+                </div>
+                <span className="text-[11px] text-emerald-100 font-mono block mt-0.5">
+                  Pot brut : {formatFCFA(myTurnInfo?.potAmount || 250000)} &minus; Frais SaaS 5% ({formatFCFA(Math.round((myTurnInfo?.potAmount || 250000) * 0.05))})
+                </span>
+              </div>
+
+              <div className="p-2.5 rounded-xl bg-black/20 backdrop-blur-xs text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span>Cotisations collectées aujourd'hui :</span>
+                  <strong>
+                    {myActivePotTurn.members.filter((m) => m.hasPaidToday).length} / {myActivePotTurn.totalMembersCount} membres
+                  </strong>
+                </div>
+                <div className="flex justify-between text-[11px] text-amber-100">
+                  <span>Statut :</span>
+                  <span>En attente de versement direct sur votre Mobile Money</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : myTurnInfo ? (
           <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white shadow-lg shadow-emerald-600/20 relative overflow-hidden">
             <div className="relative z-10 space-y-3">
               <div className="flex items-center justify-between">
@@ -125,20 +218,43 @@ export const MemberPortalPage: React.FC = () => {
                 <span className="font-bold text-emerald-200">
                   {myTurnInfo.status === 'completed'
                     ? 'Déjà encaissé'
-                    : myTurnInfo.order === primaryGroup.currentDay
-                    ? 'Aujourd\'hui !'
                     : 'À venir'}
                 </span>
               </div>
             </div>
           </div>
-        )}
+        ) : null}
 
-        {/* Daily Contributions Due (Action Cards) */}
+        {/* ========================================================================= */}
+        {/* COMPTE À REBOURS DE PROCHAINE ÉCHÉANCE */}
+        {/* ========================================================================= */}
+        <div className="p-4 rounded-2xl bg-slate-900 text-white flex items-center justify-between shadow-md">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+              <Clock size={20} />
+            </div>
+            <div>
+              <span className="text-[11px] text-slate-400 uppercase tracking-wider font-semibold block">
+                Prochaine Échéance de Tirage
+              </span>
+              <span className="text-xs text-slate-300">
+                Aujourd'hui à 18h00 · Clôture dans :
+              </span>
+            </div>
+          </div>
+
+          <div className="font-mono font-black text-lg text-emerald-400 bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-700">
+            {String(countdown.hours).padStart(2, '0')}:{String(countdown.minutes).padStart(2, '0')}:{String(countdown.seconds).padStart(2, '0')}
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* MES COTISATIONS EN COURS (Action Cards avec Bouton Payer) */}
+        {/* ========================================================================= */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Mes cotisations en cours
+              Mes cotisations actives
             </h3>
             <span className="text-xs text-slate-400 font-mono">
               {displayGroups.length} groupe{displayGroups.length > 1 ? 's' : ''}
@@ -159,18 +275,18 @@ export const MemberPortalPage: React.FC = () => {
                       {group.name}
                     </h4>
                     <p className="text-xs text-slate-500 mt-0.5">
-                      Tour #{group.currentDay} / {group.totalMembersCount} · Modérateur : Mme Claire Mballa
+                      Tour #{group.currentDay} / {group.totalMembersCount} · {group.type === 'rotative' ? 'Rotative Fixe' : group.type}
                     </p>
                   </div>
 
                   <Badge variant={hasPaid ? 'success' : 'warning'}>
-                    {hasPaid ? 'À jour' : 'À cotiser'}
+                    {hasPaid ? 'À jour' : 'Cotisation due'}
                   </Badge>
                 </div>
 
                 <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-between">
                   <div>
-                    <span className="text-[11px] text-slate-400 block">Cotisation du jour</span>
+                    <span className="text-[11px] text-slate-400 block">Montant du versement</span>
                     <span className="font-mono text-base font-bold text-slate-900 dark:text-white">
                       {formatFCFA(group.contributionAmount)}
                     </span>
@@ -183,7 +299,7 @@ export const MemberPortalPage: React.FC = () => {
                       onClick={() => handleOpenPay(group)}
                       leftIcon={<Smartphone size={15} />}
                     >
-                      Payer par Mobile Money
+                      Payer ma cotisation
                     </Button>
                   ) : (
                     <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
@@ -214,12 +330,12 @@ export const MemberPortalPage: React.FC = () => {
               {formatFCFA(totalIContributed || 220000)}
             </span>
             <span className="text-[10px] text-emerald-600 font-semibold mt-1 block">
-              100% à l'heure
+              Score de ponctualité : 98%
             </span>
           </Card>
 
           <Card className="p-4">
-            <span className="text-xs text-slate-400 block mb-1">Cagnottes reçues</span>
+            <span className="text-xs text-slate-400 block mb-1">Cagnottes encaissées</span>
             <span className="font-mono text-lg font-bold text-emerald-600 dark:text-emerald-400 block">
               {formatFCFA(200000)}
             </span>
@@ -229,14 +345,17 @@ export const MemberPortalPage: React.FC = () => {
           </Card>
         </div>
 
-        {/* Payment History */}
+        {/* Payment History & Receipts */}
         <Card className="p-4">
           <CardHeader className="px-0 pt-0 pb-3">
-            <CardTitle>Historique de mes versements</CardTitle>
+            <div className="flex items-center justify-between w-full">
+              <CardTitle>Historique des versements & Reçus</CardTitle>
+              <span className="text-xs text-slate-400">{myPayments.length} transactions</span>
+            </div>
           </CardHeader>
 
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
-            {myPayments.slice(0, 5).map((p) => (
+            {myPayments.slice(0, 6).map((p) => (
               <div key={p.id} className="py-2.5 flex items-center justify-between">
                 <div>
                   <h5 className="text-xs font-bold text-slate-900 dark:text-white">
@@ -246,13 +365,24 @@ export const MemberPortalPage: React.FC = () => {
                     {formatDateTime(p.date)} · {p.method}
                   </p>
                 </div>
-                <div className="text-right">
-                  <span className="font-mono text-xs font-bold text-slate-900 dark:text-white block">
-                    {formatFCFA(p.amount)}
-                  </span>
-                  <span className="text-[10px] text-emerald-600 font-semibold">
-                    Validé
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="text-right">
+                    <span className="font-mono text-xs font-bold text-slate-900 dark:text-white block">
+                      {formatFCFA(p.amount)}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">
+                      Validé
+                    </span>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleOpenReceipt(p)}
+                    title="Voir le reçu de paiement"
+                  >
+                    <FileText size={14} className="text-emerald-600" />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -268,6 +398,23 @@ export const MemberPortalPage: React.FC = () => {
           group={selectedGroupToPay}
         />
       )}
+
+      {/* Webhook simulator */}
+      <WebhookSimulatorModal
+        isOpen={webhookModalOpen}
+        onClose={() => setWebhookModalOpen(false)}
+        defaultGroupId={primaryGroup?.id}
+      />
+
+      {/* Receipt Modal */}
+      <ReceiptModal
+        isOpen={receiptModalOpen}
+        onClose={() => {
+          setReceiptModalOpen(false);
+          setSelectedTxForReceipt(null);
+        }}
+        transaction={selectedTxForReceipt}
+      />
     </div>
   );
 };

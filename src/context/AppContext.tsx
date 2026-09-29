@@ -1,6 +1,23 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { User, Member, TontineGroup, PaymentTransaction, AppNotification, ToastMessage, UserRole } from '../types';
-import { CURRENT_MODERATOR, CURRENT_MEMBER, MOCK_MEMBERS, MOCK_GROUPS, generateMockTransactions, MOCK_NOTIFICATIONS } from '../mocks/data';
+import {
+  User,
+  Member,
+  TontineGroup,
+  PaymentTransaction,
+  AppNotification,
+  ToastMessage,
+  UserRole,
+  KycStatus,
+  WebhookSimulationPayload,
+} from '../types';
+import {
+  CURRENT_MODERATOR,
+  CURRENT_MEMBER,
+  MOCK_MEMBERS,
+  MOCK_GROUPS,
+  generateMockTransactions,
+  MOCK_NOTIFICATIONS,
+} from '../mocks/data';
 import { api } from '../services/api';
 
 interface AppContextType {
@@ -9,12 +26,17 @@ interface AppContextType {
   currentUser: User;
   switchRole: (role: UserRole) => void;
   setCurrentUser: (user: User) => void;
+  updateUserKyc: (userId: string, kycStatus: KycStatus) => Promise<void>;
+  updateUserTrustScore: (userId: string, trustScore: number) => Promise<void>;
 
   groups: TontineGroup[];
   addGroup: (group: Omit<TontineGroup, 'id'>) => Promise<TontineGroup>;
   updateGroup: (id: string, updates: Partial<TontineGroup>) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
   advanceGroupRound: (groupId: string) => Promise<void>;
+  payoutPot: (groupId: string, force?: boolean, notes?: string) => Promise<any>;
+  reorderTurns: (groupId: string, turns: { memberId: string; order: number }[]) => Promise<void>;
+  verifyMemberPresence: (groupId: string, memberId: string, validated?: boolean) => Promise<void>;
 
   members: Member[];
   addMember: (member: Omit<Member, 'id'>) => Promise<Member>;
@@ -23,6 +45,7 @@ interface AppContextType {
   payments: PaymentTransaction[];
   recordPayment: (payment: Omit<PaymentTransaction, 'id' | 'transactionRef'>) => Promise<PaymentTransaction>;
   verifyPayment: (id: string) => Promise<void>;
+  simulateWebhook: (payload: WebhookSimulationPayload) => Promise<any>;
 
   notifications: AppNotification[];
   markNotificationAsRead: (id: string) => Promise<void>;
@@ -131,7 +154,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setIsBackendConnected(true);
     } catch (err) {
       console.warn('Backend sync note: operating with active local cache', err);
-      // Still connected or fallback mode
       setIsBackendConnected(false);
     }
   }, []);
@@ -154,12 +176,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [payments]);
 
   const switchRole = (role: UserRole) => {
-    if (role === 'moderator') {
+    if (role === 'moderator' || role === 'admin') {
       setCurrentUser(CURRENT_MODERATOR);
-      addToast('Mode Modérateur activé', 'Vous gérez vos groupes et encaissez les cotisations.', 'info');
+      addToast('Mode Administrateur activé', 'Vous gérez vos tontines, les membres et encaissez les cotisations.', 'info');
     } else {
       setCurrentUser(CURRENT_MEMBER);
-      addToast('Mode Membre activé', 'Vous êtes connecté en tant que Amadou Bello.', 'info');
+      addToast('Mode Membre activé', 'Connecté en tant que Amadou Bello.', 'info');
+    }
+  };
+
+  const updateUserKyc = async (userId: string, kycStatus: KycStatus) => {
+    try {
+      const res = await api.updateKycStatus(userId, kycStatus);
+      if (currentUser.id === userId) {
+        setCurrentUser(res.user);
+      }
+      setMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, kycStatus } : m)));
+      addToast('Statut KYC mis à jour', `Nouveau statut : ${kycStatus}`, 'success');
+    } catch {
+      setMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, kycStatus } : m)));
+      addToast('Statut KYC mis à jour (local)', `Nouveau statut : ${kycStatus}`, 'info');
+    }
+  };
+
+  const updateUserTrustScore = async (userId: string, trustScore: number) => {
+    try {
+      const res = await api.updateTrustScore(userId, trustScore);
+      if (currentUser.id === userId) {
+        setCurrentUser(res.user);
+      }
+      setMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, trustScore } : m)));
+      addToast('Score actualisé', `Score de confiance : ${trustScore}%`, 'success');
+    } catch {
+      setMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, trustScore } : m)));
     }
   };
 
@@ -168,14 +217,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const serverGroup = await api.createGroup(groupData);
       setGroups((prev) => [serverGroup, ...prev.filter((g) => g.id !== serverGroup.id)]);
-      addToast('Groupe créé avec succès', `${serverGroup.name} enregistré sur le serveur.`, 'success');
+      addToast('Tontine créée avec succès', `${serverGroup.name} enregistrée sur le serveur backend.`, 'success');
       return serverGroup;
     } catch {
-      // Fallback
       const newId = `grp_${Date.now()}`;
       const newGroup: TontineGroup = { ...groupData, id: newId };
       setGroups((prev) => [newGroup, ...prev]);
-      addToast('Groupe créé (mode local)', `${newGroup.name} enregistré.`, 'success');
+      addToast('Tontine créée (mode local)', `${newGroup.name} enregistrée.`, 'success');
       return newGroup;
     }
   };
@@ -184,10 +232,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const updated = await api.updateGroup(id, updates);
       setGroups((prev) => prev.map((g) => (g.id === id ? updated : g)));
-      addToast('Groupe mis à jour', 'Modifications enregistrées sur le serveur.', 'success');
+      addToast('Tontine mise à jour', 'Modifications enregistrées sur le serveur.', 'success');
     } catch {
       setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, ...updates } : g)));
-      addToast('Groupe mis à jour', 'Modifications enregistrées.', 'success');
+      addToast('Tontine mise à jour', 'Modifications enregistrées.', 'success');
     }
   };
 
@@ -198,7 +246,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       // ignore
     }
     setGroups((prev) => prev.filter((g) => g.id !== id));
-    addToast('Groupe archivé', 'Le groupe a été supprimé de la liste active.', 'info');
+    addToast('Tontine archivée', 'Le groupe a été retiré de la liste active.', 'info');
   };
 
   const advanceGroupRound = async (groupId: string) => {
@@ -209,7 +257,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
       addToast('Tour clôturé avec succès', 'La cagnotte a été remise et le tour suivant est ouvert !', 'success');
     } catch {
-      // Local fallback
       setGroups((prev) =>
         prev.map((g) => {
           if (g.id !== groupId) return g;
@@ -229,7 +276,80 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           };
         })
       );
-      addToast('Tour clôturé avec succès', 'La cagnotte a été remise et le tour suivant est ouvert !', 'success');
+      addToast('Tour clôturé avec succès', 'Le tour suivant est maintenant ouvert !', 'success');
+    }
+  };
+
+  // Payout pot disbursement with backend validation
+  const payoutPot = async (groupId: string, force = false, notes?: string) => {
+    try {
+      const result = await api.payoutPot(groupId, { force, notes });
+      if (result.updatedGroup) {
+        setGroups((prev) => prev.map((g) => (g.id === groupId ? result.updatedGroup : g)));
+      }
+      await refreshData();
+      addToast('Pot débloqué et versé !', result.message, 'success');
+      return result;
+    } catch (err: any) {
+      addToast('Erreur déblocage cagnotte', err.message || 'Impossible de verser le pot', 'error');
+      throw err;
+    }
+  };
+
+  // Reorder turns
+  const reorderTurns = async (groupId: string, turns: { memberId: string; order: number }[]) => {
+    try {
+      const res = await api.reorderTurns(groupId, turns);
+      if (res.group) {
+        setGroups((prev) => prev.map((g) => (g.id === groupId ? res.group : g)));
+      }
+      addToast('Ordre des tours reconfiguré', 'Nouvel ordre de passage enregistré.', 'success');
+    } catch {
+      // Local fallback
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (g.id !== groupId) return g;
+          const updatedMembers = g.members.map((m) => {
+            const found = turns.find((t) => t.memberId === m.memberId);
+            return found ? { ...m, turnOrder: found.order } : m;
+          });
+          const updatedSchedule = g.beneficiarySchedule.map((b) => {
+            const found = turns.find((t) => t.memberId === b.memberId);
+            return found ? { ...b, order: found.order } : b;
+          }).sort((a, b) => a.order - b.order);
+
+          return { ...g, members: updatedMembers, beneficiarySchedule: updatedSchedule };
+        })
+      );
+      addToast('Ordre des tours modifié', 'Nouvel ordre de passage appliqué.', 'success');
+    }
+  };
+
+  // Verify member presence
+  const verifyMemberPresence = async (groupId: string, memberId: string, presenceValidated = true) => {
+    try {
+      const res = await api.verifyMemberPresence(groupId, memberId, presenceValidated);
+      if (res.group) {
+        setGroups((prev) => prev.map((g) => (g.id === groupId ? res.group : g)));
+      }
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, presenceValidated } : m))
+      );
+      addToast('Présence membre validée', 'Le statut du membre a été mis à jour.', 'success');
+    } catch {
+      setGroups((prev) =>
+        prev.map((g) => {
+          if (g.id !== groupId) return g;
+          return {
+            ...g,
+            members: g.members.map((m) => (m.memberId === memberId ? { ...m, presenceValidated } : m)),
+          };
+        })
+      );
+      setMembers((prev) =>
+        prev.map((m) => (m.id === memberId ? { ...m, presenceValidated } : m))
+      );
+      addToast('Présence membre validée', 'Mis à jour en mode local.', 'info');
     }
   };
 
@@ -242,7 +362,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return serverMember;
     } catch {
       const newId = `mem_${Date.now()}`;
-      const newMember: Member = { ...memberData, id: newId };
+      const newMember: Member = {
+        ...memberData,
+        id: newId,
+        kycStatus: memberData.kycStatus || 'pending',
+        presenceValidated: true,
+      };
       setMembers((prev) => [newMember, ...prev]);
       addToast('Nouveau membre ajouté', `${newMember.name} a été ajouté à la communauté.`, 'success');
       return newMember;
@@ -304,6 +429,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...paymentData,
         id: newId,
         transactionRef: ref,
+        receiptNumber: `REC-${ref}`,
       };
 
       setPayments((prev) => [newTx, ...prev]);
@@ -341,6 +467,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  // Webhook Simulator
+  const simulateWebhook = async (payload: WebhookSimulationPayload) => {
+    try {
+      const result = await api.simulateWebhook(payload);
+      await refreshData();
+      if (result.success) {
+        addToast(
+          `Webhook ${payload.operator} validé !`,
+          `Reçu N° ${result.receiptNumber} généré. Montant : ${payload.amount.toLocaleString()} FCFA`,
+          'success'
+        );
+      } else {
+        addToast(`Webhook ${payload.operator} : Paiement échoué`, 'Le statut de la transaction est passé à échoué.', 'warning');
+      }
+      return result;
+    } catch (err: any) {
+      addToast('Erreur Webhook', err.message || 'Échec de la simulation', 'error');
+      throw err;
+    }
+  };
+
   const verifyPayment = async (id: string) => {
     try {
       await api.verifyPayment(id);
@@ -352,7 +499,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         p.id === id ? { ...p, status: 'paid', verifiedByModerator: true } : p
       )
     );
-    addToast('Paiement validé', 'La transaction est confirmée.', 'success');
+    addToast('Paiement validé', 'La transaction est confirmée et horodatée.', 'success');
   };
 
   // Notifications methods
@@ -385,17 +532,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser,
         switchRole,
         setCurrentUser,
+        updateUserKyc,
+        updateUserTrustScore,
         groups,
         addGroup,
         updateGroup,
         deleteGroup,
         advanceGroupRound,
+        payoutPot,
+        reorderTurns,
+        verifyMemberPresence,
         members,
         addMember,
         updateMember,
         payments,
         recordPayment,
         verifyPayment,
+        simulateWebhook,
         notifications,
         markNotificationAsRead,
         markAllNotificationsAsRead,

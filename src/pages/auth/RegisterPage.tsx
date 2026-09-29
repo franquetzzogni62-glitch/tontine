@@ -30,6 +30,8 @@ export const RegisterPage: React.FC = () => {
         email: email || 'user@tontiflow.africa',
         phone: phone || '+237 6 00 00 00 00',
         role,
+        trustScore: 100,
+        kycStatus: 'verified',
         city: 'Douala',
         country: 'Cameroun',
       });
