@@ -22,7 +22,7 @@ export const Navbar: React.FC = () => {
           </span>
         </Link>
 
-        {/* Zone 2: 4 clean text navigation links */}
+        {/* Zone 2: Clean text navigation links */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600 dark:text-slate-300">
           <a href="#comment-ca-marche" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
             Comment ça marche
@@ -33,9 +33,9 @@ export const Navbar: React.FC = () => {
           <a href="#temoignages" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
             Témoignages
           </a>
-          <a href="#tarifs" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-            Tarifs
-          </a>
+          <Link to="/member" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+            Portail Membre
+          </Link>
         </nav>
 
         {/* Zone 3: Actions */}
@@ -105,13 +105,13 @@ export const Navbar: React.FC = () => {
             >
               Témoignages
             </a>
-            <a
-              href="#tarifs"
+            <Link
+              to="/member"
               onClick={() => setMobileMenuOpen(false)}
               className="px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
             >
-              Tarifs
-            </a>
+              Portail Membre
+            </Link>
           </div>
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">

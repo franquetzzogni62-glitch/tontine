@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Menu, Sun, Moon, Bell, Check, ArrowRightLeft, Sparkles, Zap } from 'lucide-react';
+import { Menu, Sun, Moon, Bell, Check } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { formatDateTime } from '../../utils/formatters';
-import { WebhookSimulatorModal } from '../modals/WebhookSimulatorModal';
 
 interface TopbarProps {
   onOpenSidebar: () => void;
@@ -22,15 +21,12 @@ export const Topbar: React.FC<TopbarProps> = ({
     theme,
     toggleTheme,
     currentUser,
-    switchRole,
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
-    isBackendConnected,
   } = useApp();
 
   const [notifOpen, setNotifOpen] = useState(false);
-  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
@@ -75,43 +71,6 @@ export const Topbar: React.FC<TopbarProps> = ({
       {/* Right zone: Actions, notifications, theme toggle, profile */}
       <div className="flex items-center gap-2 sm:gap-3">
         {action && <div className="hidden sm:block">{action}</div>}
-
-        {/* Webhook Simulator trigger */}
-        <button
-          onClick={() => setWebhookModalOpen(true)}
-          className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/20 transition-colors cursor-pointer"
-          title="Simuler un Webhook Mobile Money entrant"
-        >
-          <Zap size={13} className="text-amber-500" />
-          <span>Simulateur Webhook</span>
-        </button>
-
-        {/* Backend live indicator */}
-        <div
-          className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border ${
-            isBackendConnected
-              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
-              : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-          }`}
-          title={isBackendConnected ? 'Backend Express /api connecté' : 'Mode hors-ligne'}
-        >
-          <span
-            className={`w-1.5 h-1.5 rounded-full ${
-              isBackendConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'
-            }`}
-          />
-          <span>{isBackendConnected ? 'Serveur API Connecté' : 'Mode Local'}</span>
-        </div>
-
-        {/* Role toggle badge */}
-        <button
-          onClick={() => switchRole(currentUser.role === 'moderator' ? 'member' : 'moderator')}
-          className="hidden md:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 hover:border-emerald-500 transition-colors cursor-pointer"
-          title="Basculer rapidement entre rôle Modérateur et Membre"
-        >
-          <ArrowRightLeft size={13} className="text-emerald-500" />
-          <span>{currentUser.role === 'moderator' ? 'Vue Modérateur' : 'Vue Membre'}</span>
-        </button>
 
         {/* Dark mode button */}
         <button
@@ -211,11 +170,6 @@ export const Topbar: React.FC<TopbarProps> = ({
           </div>
         </div>
       </div>
-
-      <WebhookSimulatorModal
-        isOpen={webhookModalOpen}
-        onClose={() => setWebhookModalOpen(false)}
-      />
     </header>
   );
 };

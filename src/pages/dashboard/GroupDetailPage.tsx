@@ -11,7 +11,6 @@ import { Input } from '../../components/ui/Input';
 import { RecordPaymentModal } from '../../components/modals/RecordPaymentModal';
 import { InviteModal } from '../../components/modals/InviteModal';
 import { PayoutPotModal } from '../../components/modals/PayoutPotModal';
-import { WebhookSimulatorModal } from '../../components/modals/WebhookSimulatorModal';
 import { ReceiptModal } from '../../components/modals/ReceiptModal';
 import { FinancialSummaryWidget } from '../../components/FinancialSummaryWidget';
 import { RegularizePenaltyModal } from '../../components/modals/RegularizePenaltyModal';
@@ -65,7 +64,6 @@ export const GroupDetailPage: React.FC = () => {
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
-  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [regularizeModalOpen, setRegularizeModalOpen] = useState(false);
   const [selectedMemberForPenalty, setSelectedMemberForPenalty] = useState<Member | undefined>(undefined);
@@ -196,17 +194,6 @@ export const GroupDetailPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {/* Webhook simulator quick trigger */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setWebhookModalOpen(true)}
-            leftIcon={<Zap size={14} className="text-amber-500" />}
-            title="Tester le Webhook Mobile Money"
-          >
-            Simulateur Webhook
-          </Button>
-
           <Button
             variant="outline"
             size="sm"
@@ -901,12 +888,6 @@ export const GroupDetailPage: React.FC = () => {
         isOpen={payoutModalOpen}
         onClose={() => setPayoutModalOpen(false)}
         group={group}
-      />
-
-      <WebhookSimulatorModal
-        isOpen={webhookModalOpen}
-        onClose={() => setWebhookModalOpen(false)}
-        defaultGroupId={group.id}
       />
 
       <ReceiptModal

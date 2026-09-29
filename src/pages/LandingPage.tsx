@@ -420,166 +420,39 @@ export const LandingPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Pricing Section (3 Plans) */}
-      <section id="tarifs" className="py-16 sm:py-24 bg-slate-50 dark:bg-slate-950 border-t border-slate-200/80 dark:border-slate-800/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-widest">
-              TARIFS CLAIRS & TRANSPARENTS
-            </span>
-            <h2 className="text-2xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-2 tracking-tight">
-              Choisissez la formule adaptée à vos groupes
-            </h2>
-            <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-3">
-              Démarrez gratuitement, passez à la vitesse supérieure quand vos groupes s'agrandissent.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-            {/* Plan 1 */}
-            <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  POUR DÉBUTER
-                </span>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-                  Gratuit
-                </h3>
-                <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-slate-900 dark:text-white">
-                    0 FCFA
-                  </span>
-                  <span className="text-xs text-slate-500">/ mois</span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
-                  Idéal pour un cercle familial ou entre amis proches.
-                </p>
-
-                <ul className="mt-6 space-y-3 text-xs text-slate-700 dark:text-slate-300">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Jusqu'à 2 groupes actifs</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>10 membres max par groupe</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Suivi des tours en direct</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Portail membre sur mobile</span>
-                  </li>
-                </ul>
-              </div>
-
-              <Link to="/register" className="mt-8">
-                <Button variant="outline" size="md" className="w-full">
-                  Créer un compte gratuit
-                </Button>
-              </Link>
-            </div>
-
-            {/* Plan 2 - Highlighted */}
-            <div className="p-8 rounded-2xl bg-slate-900 text-white dark:bg-slate-900 border-2 border-emerald-500 flex flex-col justify-between relative shadow-xl">
-              <div className="absolute -top-3.5 right-6 px-3 py-1 rounded-full bg-emerald-500 text-white font-bold text-[10px] uppercase tracking-wider">
-                Le plus populaire
-              </div>
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
-                  POUR MODÉRATEURS ACTIFS
-                </span>
-                <h3 className="text-xl font-bold mt-1">
-                  Pro Modérateur
-                </h3>
-                <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-white">
-                    4 900 FCFA
-                  </span>
-                  <span className="text-xs text-slate-400">/ mois</span>
-                </div>
-                <p className="text-xs text-slate-300 mt-2">
-                  Pour les responsables de tontines de marché et associations.
-                </p>
-
-                <ul className="mt-6 space-y-3 text-xs text-slate-300">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-                    <span>Groupes illimités</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-                    <span>Jusqu'à 50 membres par groupe</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-                    <span>Rappels SMS & WhatsApp automatisés</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-                    <span>Calcul & encaissement automatique des commissions</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
-                    <span>Exports comptables CSV & PDF</span>
-                  </li>
-                </ul>
-              </div>
-
-              <Link to="/register" className="mt-8">
-                <Button variant="emerald" size="md" className="w-full">
-                  Démarrer l'essai 14 jours
-                </Button>
-              </Link>
-            </div>
-
-            {/* Plan 3 */}
-            <div className="p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-              <div>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
-                  COOPÉRATIVES & RÉSEAUX
-                </span>
-                <h3 className="text-xl font-bold text-slate-900 dark:text-white mt-1">
-                  Business
-                </h3>
-                <div className="mt-4 flex items-baseline gap-1">
-                  <span className="text-3xl sm:text-4xl font-extrabold font-mono text-slate-900 dark:text-white">
-                    19 900 FCFA
-                  </span>
-                  <span className="text-xs text-slate-500">/ mois</span>
-                </div>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-2">
-                  Pour les mutuelles, associations et grandes coopératives.
-                </p>
-
-                <ul className="mt-6 space-y-3 text-xs text-slate-700 dark:text-slate-300">
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Groupes et membres illimités</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Multi-modérateurs (rôles & droits)</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Passerelle API Mobile Money directe</span>
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
-                    <span>Support dédié prioritaire 7j/7</span>
-                  </li>
-                </ul>
-              </div>
-
-              <Link to="/register" className="mt-8">
-                <Button variant="outline" size="md" className="w-full">
-                  Contacter l'équipe
-                </Button>
-              </Link>
-            </div>
+      {/* Call to Action Section */}
+      <section className="py-16 sm:py-20 bg-emerald-600 dark:bg-emerald-950 text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:16px_16px]" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative text-center space-y-6">
+          <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/15 text-xs font-semibold uppercase tracking-wider backdrop-blur-sm">
+            <Sparkles size={14} /> Modernisez vos tontines dès aujourd'hui
+          </span>
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight max-w-3xl mx-auto text-balance">
+            Fini les carnets papier, les retards et les disputes de trésorerie.
+          </h2>
+          <p className="text-sm sm:text-base text-emerald-100 max-w-xl mx-auto leading-relaxed">
+            Rejoignez des centaines de modérateurs et cotisants qui automatisent leurs cotisations et cagnottes en toute transparence.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+            <Link to="/register">
+              <Button
+                variant="outline"
+                size="lg"
+                className="w-full sm:w-auto bg-white text-emerald-800 hover:bg-emerald-50 border-white font-bold shadow-lg"
+                rightIcon={<ArrowRight size={18} />}
+              >
+                Créer un groupe gratuitement
+              </Button>
+            </Link>
+            <Link to="/dashboard">
+              <Button
+                variant="ghost"
+                size="lg"
+                className="w-full sm:w-auto text-white hover:bg-white/10 border border-white/30"
+              >
+                Découvrir l'espace modérateur
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
@@ -609,7 +482,7 @@ export const LandingPage: React.FC = () => {
               <ul className="space-y-2 text-xs">
                 <li><a href="#fonctionnalites" className="hover:text-white transition-colors">Fonctionnalités</a></li>
                 <li><a href="#comment-ca-marche" className="hover:text-white transition-colors">Comment ça marche</a></li>
-                <li><a href="#tarifs" className="hover:text-white transition-colors">Tarifs & Abonnements</a></li>
+                <li><Link to="/register" className="hover:text-white transition-colors">Créer une tontine</Link></li>
                 <li><Link to="/member" className="hover:text-white transition-colors">Portail Membre</Link></li>
               </ul>
             </div>

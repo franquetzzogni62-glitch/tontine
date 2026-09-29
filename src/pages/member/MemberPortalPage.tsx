@@ -8,7 +8,6 @@ import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Avatar } from '../../components/ui/Avatar';
 import { MemberPayModal } from '../../components/modals/MemberPayModal';
 import { ReceiptModal } from '../../components/modals/ReceiptModal';
-import { WebhookSimulatorModal } from '../../components/modals/WebhookSimulatorModal';
 import { RegularizePenaltyModal } from '../../components/modals/RegularizePenaltyModal';
 import { TontineGroup, PaymentTransaction, Member } from '../../types';
 import {
@@ -41,7 +40,6 @@ export const MemberPortalPage: React.FC = () => {
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [penaltyModalOpen, setPenaltyModalOpen] = useState(false);
   const [selectedGroupForPenalty, setSelectedGroupForPenalty] = useState<TontineGroup | null>(null);
-  const [webhookModalOpen, setWebhookModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<PaymentTransaction | null>(null);
 
@@ -133,25 +131,6 @@ export const MemberPortalPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Webhook test quick modal */}
-          <button
-            onClick={() => setWebhookModalOpen(true)}
-            className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-500/10 transition-colors cursor-pointer"
-            title="Tester le Webhook Mobile Money"
-          >
-            <Zap size={16} />
-          </button>
-
-          {/* Quick role toggle */}
-          <button
-            onClick={() => switchRole(currentUser.role === 'moderator' ? 'member' : 'moderator')}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:text-emerald-600 transition-colors cursor-pointer"
-            title="Passer en vue administrateur"
-          >
-            <ArrowRightLeft size={13} className="text-emerald-500" />
-            <span className="hidden sm:inline">Vue</span> Admin
-          </button>
-
           <button
             onClick={toggleTheme}
             className="p-2 text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
@@ -469,13 +448,6 @@ export const MemberPortalPage: React.FC = () => {
           group={selectedGroupToPay}
         />
       )}
-
-      {/* Webhook simulator */}
-      <WebhookSimulatorModal
-        isOpen={webhookModalOpen}
-        onClose={() => setWebhookModalOpen(false)}
-        defaultGroupId={primaryGroup?.id}
-      />
 
       {/* Receipt Modal */}
       <ReceiptModal
