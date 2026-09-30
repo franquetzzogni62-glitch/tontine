@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/Badge';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Avatar } from '../../components/ui/Avatar';
 import { RecordPaymentModal } from '../../components/modals/RecordPaymentModal';
+import { WithdrawDepositModal } from '../../components/modals/WithdrawDepositModal';
 import {
   TrendingUp,
   Users2,
@@ -14,6 +15,7 @@ import {
   CreditCard,
   Plus,
   ArrowUpRight,
+  ArrowDownLeft,
   Clock,
   CheckCircle2,
   Calendar,
@@ -37,6 +39,8 @@ import {
 export const OverviewPage: React.FC = () => {
   const { groups, members, payments, currentUser, advanceGroupRound } = useApp();
   const [recordModalOpen, setRecordModalOpen] = useState(false);
+  const [withdrawDepositOpen, setWithdrawDepositOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'withdraw' | 'deposit'>('withdraw');
 
   // Calculate KPIs
   const activeGroups = groups.filter((g) => g.status === 'active');
@@ -119,15 +123,41 @@ export const OverviewPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Moderator Deposit & Withdrawal buttons */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setModalTab('deposit');
+              setWithdrawDepositOpen(true);
+            }}
+            leftIcon={<ArrowDownLeft size={15} />}
+          >
+            Dépôt
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setModalTab('withdraw');
+              setWithdrawDepositOpen(true);
+            }}
+            leftIcon={<ArrowUpRight size={15} />}
+          >
+            Retrait
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
             onClick={() => setRecordModalOpen(true)}
             leftIcon={<CreditCard size={15} />}
           >
-            Encaisser une cotisation
+            Encaisser
           </Button>
+
           <Link to="/dashboard/groups/new">
             <Button
               variant="emerald"
@@ -143,23 +173,51 @@ export const OverviewPage: React.FC = () => {
       {/* 4 KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* KPI 1: Commissions modérateur */}
-        <Card className="relative overflow-hidden">
-          <div className="flex items-start justify-between">
-            <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
-              Commissions modérateur
-            </span>
-            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <Wallet size={16} />
+        <Card className="relative overflow-hidden flex flex-col justify-between">
+          <div>
+            <div className="flex items-start justify-between">
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Commissions modérateur
+              </span>
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                <Wallet size={16} />
+              </div>
+            </div>
+            <div className="mt-2">
+              <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
+                {formatFCFA(totalCommissionEarned)}
+              </div>
+              <div className="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                <TrendingUp size={13} />
+                <span>+14.5% vs mois précédent</span>
+              </div>
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-2xl font-bold font-mono tabular-nums text-slate-900 dark:text-white">
-              {formatFCFA(totalCommissionEarned)}
-            </div>
-            <div className="flex items-center gap-1.5 mt-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-              <TrendingUp size={13} />
-              <span>+14.5% vs mois précédent</span>
-            </div>
+
+          {/* Quick Dépôt & Retrait actions on KPI card */}
+          <div className="grid grid-cols-2 gap-1.5 mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+            <button
+              onClick={() => {
+                setModalTab('withdraw');
+                setWithdrawDepositOpen(true);
+              }}
+              className="flex items-center justify-center gap-1 py-1.5 px-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded-lg transition-colors cursor-pointer"
+              title="Retirer mes commissions vers Mobile Money"
+            >
+              <ArrowUpRight size={13} />
+              <span>Retirer</span>
+            </button>
+            <button
+              onClick={() => {
+                setModalTab('deposit');
+                setWithdrawDepositOpen(true);
+              }}
+              className="flex items-center justify-center gap-1 py-1.5 px-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+              title="Approvisionner la réserve ou trésorerie"
+            >
+              <ArrowDownLeft size={13} />
+              <span>Dépôt</span>
+            </button>
           </div>
         </Card>
 
@@ -507,6 +565,13 @@ export const OverviewPage: React.FC = () => {
       <RecordPaymentModal
         isOpen={recordModalOpen}
         onClose={() => setRecordModalOpen(false)}
+      />
+
+      {/* Moderator Withdraw & Deposit Modal */}
+      <WithdrawDepositModal
+        isOpen={withdrawDepositOpen}
+        onClose={() => setWithdrawDepositOpen(false)}
+        defaultTab={modalTab}
       />
     </div>
   );

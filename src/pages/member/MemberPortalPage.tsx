@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Card, CardHeader, CardTitle } from '../../components/ui/Card';
 import { Button } from '../../components/ui/Button';
@@ -30,11 +30,13 @@ import {
   AlertCircle,
   Coins,
   Users2,
+  LogOut,
 } from 'lucide-react';
 import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
 
 export const MemberPortalPage: React.FC = () => {
-  const { currentUser, switchRole, groups, members, payments, theme, toggleTheme } = useApp();
+  const { currentUser, switchRole, logout, groups, members, payments, theme, toggleTheme } = useApp();
+  const navigate = useNavigate();
 
   const [selectedGroupToPay, setSelectedGroupToPay] = useState<TontineGroup | null>(null);
   const [payModalOpen, setPayModalOpen] = useState(false);
@@ -137,6 +139,18 @@ export const MemberPortalPage: React.FC = () => {
             aria-label="Basculer le thème"
           >
             {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
+          </button>
+
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            title="Se déconnecter"
+            className="flex items-center gap-1.5 p-2 sm:px-2.5 sm:py-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+          >
+            <LogOut size={16} />
+            <span className="hidden sm:inline">Déconnexion</span>
           </button>
         </div>
       </header>

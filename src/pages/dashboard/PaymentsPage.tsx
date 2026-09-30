@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/Badge';
 import { Tabs } from '../../components/ui/Tabs';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { RecordPaymentModal } from '../../components/modals/RecordPaymentModal';
+import { WithdrawDepositModal } from '../../components/modals/WithdrawDepositModal';
 import {
   Download,
   CreditCard,
@@ -17,6 +18,8 @@ import {
   Clock,
   AlertTriangle,
   Wallet,
+  ArrowUpRight,
+  ArrowDownLeft,
 } from 'lucide-react';
 import { formatFCFA, formatDateTime, exportToCSV } from '../../utils/formatters';
 
@@ -26,6 +29,8 @@ export const PaymentsPage: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState('all');
   const [recordModalOpen, setRecordModalOpen] = useState(false);
+  const [withdrawDepositOpen, setWithdrawDepositOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<'withdraw' | 'deposit'>('withdraw');
 
   // Filter logic
   const filteredPayments = payments.filter((p) => {
@@ -97,7 +102,31 @@ export const PaymentsPage: React.FC = () => {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setModalTab('deposit');
+              setWithdrawDepositOpen(true);
+            }}
+            leftIcon={<ArrowDownLeft size={15} />}
+          >
+            Dépôt
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setModalTab('withdraw');
+              setWithdrawDepositOpen(true);
+            }}
+            leftIcon={<ArrowUpRight size={15} />}
+          >
+            Retrait
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -133,17 +162,42 @@ export const PaymentsPage: React.FC = () => {
           <span className="text-[11px] text-slate-400">Versements vérifiés avec succès</span>
         </Card>
 
-        <Card>
-          <div className="flex justify-between items-start">
-            <span className="text-xs font-semibold text-slate-500">Commissions modérateur</span>
-            <div className="p-2 rounded-lg bg-sky-500/10 text-sky-600">
-              <Wallet size={16} />
+        <Card className="flex flex-col justify-between">
+          <div>
+            <div className="flex justify-between items-start">
+              <span className="text-xs font-semibold text-slate-500">Commissions modérateur</span>
+              <div className="p-2 rounded-lg bg-sky-500/10 text-sky-600">
+                <Wallet size={16} />
+              </div>
             </div>
+            <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              {formatFCFA(totalCommissions)}
+            </div>
+            <span className="text-[11px] text-slate-400">Revenus nets générés par la gestion</span>
           </div>
-          <div className="text-2xl font-bold font-mono text-emerald-600 dark:text-emerald-400 mt-1">
-            {formatFCFA(totalCommissions)}
+
+          <div className="grid grid-cols-2 gap-1.5 mt-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <button
+              onClick={() => {
+                setModalTab('withdraw');
+                setWithdrawDepositOpen(true);
+              }}
+              className="flex items-center justify-center gap-1 py-1 px-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 rounded-lg transition-colors cursor-pointer"
+            >
+              <ArrowUpRight size={13} />
+              <span>Retirer</span>
+            </button>
+            <button
+              onClick={() => {
+                setModalTab('deposit');
+                setWithdrawDepositOpen(true);
+              }}
+              className="flex items-center justify-center gap-1 py-1 px-2 text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
+            >
+              <ArrowDownLeft size={13} />
+              <span>Dépôt</span>
+            </button>
           </div>
-          <span className="text-[11px] text-slate-400">Revenus nets générés par la gestion</span>
         </Card>
 
         <Card>
@@ -279,6 +333,13 @@ export const PaymentsPage: React.FC = () => {
       <RecordPaymentModal
         isOpen={recordModalOpen}
         onClose={() => setRecordModalOpen(false)}
+      />
+
+      {/* Withdraw & Deposit modal */}
+      <WithdrawDepositModal
+        isOpen={withdrawDepositOpen}
+        onClose={() => setWithdrawDepositOpen(false)}
+        defaultTab={modalTab}
       />
     </div>
   );

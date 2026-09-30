@@ -197,6 +197,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const logout = () => {
+    localStorage.removeItem('tontiflow_user_session');
+    addToast('Déconnexion réussie', 'Vous avez été déconnecté de votre compte.', 'info');
+  };
+
   const updateUserKyc = async (userId: string, kycStatus: KycStatus) => {
     try {
       const res = await api.updateKycStatus(userId, kycStatus);
@@ -561,6 +566,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser,
         switchRole,
         setCurrentUser,
+        logout,
         updateUserKyc,
         updateUserTrustScore,
         groups,

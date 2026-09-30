@@ -432,14 +432,6 @@ export const GroupDetailPage: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setWebhookModalOpen(true)}
-                  leftIcon={<Zap size={14} className="text-amber-500" />}
-                >
-                  Simuler Webhook
-                </Button>
-                <Button
                   variant="emerald"
                   size="sm"
                   onClick={() => {

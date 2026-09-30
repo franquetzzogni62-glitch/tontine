@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { Menu, Sun, Moon, Bell, Check } from 'lucide-react';
+import { Menu, Sun, Moon, Bell, Check, LogOut } from 'lucide-react';
 import { Avatar } from '../ui/Avatar';
 import { formatDateTime } from '../../utils/formatters';
 
@@ -21,10 +22,12 @@ export const Topbar: React.FC<TopbarProps> = ({
     theme,
     toggleTheme,
     currentUser,
+    logout,
     notifications,
     markNotificationAsRead,
     markAllNotificationsAsRead,
   } = useApp();
+  const navigate = useNavigate();
 
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -153,7 +156,7 @@ export const Topbar: React.FC<TopbarProps> = ({
           )}
         </div>
 
-        {/* User Avatar */}
+        {/* User Avatar & Logout */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200 dark:border-slate-800">
           <Avatar
             name={currentUser.name}
@@ -168,6 +171,20 @@ export const Topbar: React.FC<TopbarProps> = ({
               {currentUser.role === 'moderator' ? 'Modérateur' : 'Membre'}
             </span>
           </div>
+
+          {/* Quick logout button */}
+          <button
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+            title="Se déconnecter"
+            aria-label="Se déconnecter"
+            className="ml-1 flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 text-xs font-medium text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer"
+          >
+            <LogOut size={16} />
+            <span className="hidden md:inline">Déconnexion</span>
+          </button>
         </div>
       </div>
     </header>
