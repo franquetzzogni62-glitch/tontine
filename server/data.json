@@ -11,7 +11,18 @@
       "trustScore": 100,
       "kycStatus": "verified",
       "city": "Douala",
-      "country": "Cameroun"
+      "country": "Cameroun",
+      "subscription": {
+        "planId": "pro",
+        "planName": "Formule Pro",
+        "pricePerMonth": 15000,
+        "status": "active",
+        "startedAt": "2026-09-30T12:47:22.292Z",
+        "expiresAt": "2026-10-30T12:47:22.292Z",
+        "paymentMethod": "Orange Money",
+        "autoRenew": true,
+        "maxGroups": 999
+      }
     },
     {
       "id": "user_member_1",
@@ -87,6 +98,14 @@
   "payouts": [],
   "notifications": [
     {
+      "title": "🌟 Abonnement SaaS Modérateur activé",
+      "message": "Votre abonnement Formule Pro a été validé avec succès via Orange Money pour 30 jours supplémentaires.",
+      "type": "payment",
+      "id": "notif_1790772442293_ctye",
+      "timestamp": "2026-09-30T12:47:22.293Z",
+      "read": false
+    },
+    {
       "title": "Cotisation enregistrée",
       "message": "Test Hostinger Proxy a versé 50,000 FCFA pour Tontine Mobile Money.",
       "type": "payment",
@@ -117,6 +136,23 @@
       "id": "notif_1790683294830_tlvg",
       "timestamp": "2026-09-29T12:01:34.830Z",
       "read": false
+    }
+  ],
+  "subscriptionInvoices": [
+    {
+      "id": "inv_1790772442292",
+      "orderId": "TF-SUB-1790772442292",
+      "userId": "user_admin_1",
+      "userName": "Administrateur TontiFlow",
+      "userEmail": "admin@tontiflow.africa",
+      "planId": "pro",
+      "planName": "Formule Pro",
+      "amount": 15000,
+      "currency": "XAF",
+      "date": "2026-09-30T12:47:22.292Z",
+      "status": "paid",
+      "paymentMethod": "Orange Money",
+      "receiptNumber": "REC-SUB-MUO3OBSK"
     }
   ]
 }

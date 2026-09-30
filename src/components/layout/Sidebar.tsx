@@ -32,6 +32,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
     { to: '/dashboard/groups', label: 'Mes groupes', icon: <Users2 size={19} />, badge: groups.length },
     { to: '/dashboard/members', label: 'Membres', icon: <UserCheck size={19} /> },
     { to: '/dashboard/payments', label: 'Paiements', icon: <CreditCard size={19} /> },
+    {
+      to: '/dashboard/subscription',
+      label: 'Mon Abonnement',
+      icon: <Sparkles size={19} />,
+      badge: currentUser.subscription?.planName ? 'Pro' : undefined,
+    },
     { to: '/dashboard/reports', label: 'Rapports & Stats', icon: <BarChart3 size={19} /> },
     { to: '/dashboard/settings', label: 'Paramètres', icon: <Settings size={19} /> },
   ];
@@ -60,11 +66,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
               TF
             </div>
             <div>
-              <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white leading-none block">
-                Tonti<span className="text-emerald-500">Flow</span>
+              <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white leading-tight block truncate max-w-[140px]">
+                {currentUser.organizationName || 'TontiFlow SaaS'}
               </span>
-              <span className="text-[10px] text-slate-400 font-medium tracking-wide">
-                Espace Modérateur
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide">
+                Modérateur · {currentUser.subscription?.planName || 'Forfait Pro'}
               </span>
             </div>
           </Link>

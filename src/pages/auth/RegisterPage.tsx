@@ -4,45 +4,78 @@ import { useApp } from '../../context/AppContext';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
-import { Lock, Mail, User as UserIcon, Phone, ArrowRight, Shield, UserCheck } from 'lucide-react';
-import { UserRole } from '../../types';
+import {
+  Lock,
+  Mail,
+  User as UserIcon,
+  Phone,
+  ArrowRight,
+  Shield,
+  Building,
+  CheckCircle2,
+  Sparkles,
+  Info,
+  BadgePercent,
+} from 'lucide-react';
+import { SubscriptionPlanId } from '../../types';
+import { formatFCFA } from '../../utils/formatters';
 
 export const RegisterPage: React.FC = () => {
-  const { switchRole, setCurrentUser, addToast } = useApp();
+  const { registerModerator } = useApp();
   const navigate = useNavigate();
 
   const [name, setName] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('+237 6 ');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<UserRole>('moderator');
+  const [planId, setPlanId] = useState<SubscriptionPlanId>('pro');
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const plans = [
+    {
+      id: 'starter' as const,
+      name: 'Starter',
+      price: 5000,
+      description: 'Idéal pour démarrer 1 à 3 tontines familiales ou entre amis.',
+      limit: 'Jusqu\'à 3 tontines actives',
+    },
+    {
+      id: 'pro' as const,
+      name: 'Pro',
+      price: 15000,
+      description: 'Pour les promoteurs et gestionnaires actifs de tontines.',
+      limit: 'Tontines illimitées',
+      badge: 'Recommandé',
+    },
+    {
+      id: 'enterprise' as const,
+      name: 'Entreprise',
+      price: 30000,
+      description: 'Pour associations, mutuelles et grands réseaux de tontines.',
+      limit: 'Multi-modérateurs & Marque blanche',
+    },
+  ];
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    setTimeout(() => {
-      setIsLoading(false);
-      setCurrentUser({
-        id: `user_${Date.now()}`,
-        name: name || 'Nouveau Modérateur',
-        email: email || 'user@tontiflow.africa',
-        phone: phone || '+237 6 00 00 00 00',
-        role,
-        trustScore: 100,
-        kycStatus: 'verified',
-        city: 'Douala',
-        country: 'Cameroun',
+    try {
+      await registerModerator({
+        name: name.trim() || 'Nouveau Modérateur',
+        organizationName: organizationName.trim() || 'Réseau Tontines Indépendant',
+        email: email.trim() || `moderator_${Date.now()}@tontiflow.africa`,
+        phone: phone.trim() || '+237 6 00 00 00 00',
+        planId,
       });
-      addToast('Compte créé avec succès', 'Bienvenue sur la plateforme TontiFlow !', 'success');
 
-      if (role === 'moderator') {
-        navigate('/dashboard');
-      } else {
-        navigate('/member');
-      }
-    }, 400);
+      navigate('/dashboard');
+    } catch {
+      // Handled in context
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -57,113 +90,145 @@ export const RegisterPage: React.FC = () => {
         </span>
       </Link>
 
-      <Card className="w-full max-w-md shadow-xl">
-        <div className="text-left mb-5">
+      <Card className="w-full max-w-lg shadow-xl p-6 border border-slate-200 dark:border-slate-800 text-left">
+        <div className="mb-5">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold mb-2">
+            <Sparkles size={13} />
+            <span>Création d'espace Modérateur SaaS</span>
+          </div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-white">
-            Créer un compte TontiFlow
+            Créez votre compte Modérateur
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Rejoignez des centaines de tontines modernisées en Afrique.
+            Lancez vos propres tontines, inscrivez vos membres et encaissez vos commissions
+            facilement.
           </p>
         </div>
 
-        {/* Role selection toggle */}
-        <div className="mb-4">
-          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 text-left">
-            Vous souhaitez utiliser TontiFlow en tant que :
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setRole('moderator')}
-              className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                role === 'moderator'
-                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/20'
-                  : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <Shield size={16} className="text-emerald-500" />
-                <span className="text-xs font-bold">Modérateur</span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                Je crée des groupes et perçois des commissions.
-              </p>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setRole('member')}
-              className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                role === 'member'
-                  ? 'border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 ring-2 ring-emerald-500/20'
-                  : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-              }`}
-            >
-              <div className="flex items-center gap-2">
-                <UserCheck size={16} className="text-amber-500" />
-                <span className="text-xs font-bold">Membre</span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">
-                Je cotise et reçois mon pot à mon tour.
-              </p>
-            </button>
+        {/* Informative notice for members */}
+        <div className="p-3 mb-5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2.5">
+          <Info size={16} className="shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            <span className="font-bold block">Vous êtes membre / cotisant ?</span>
+            <span>
+              Vous n'avez pas besoin de créer un compte ici ! Votre modérateur vous remet un{' '}
+              <strong>code à 6 chiffres</strong>.{' '}
+              <Link to="/login" className="underline font-bold text-amber-700 dark:text-amber-200">
+                Cliquez ici pour vous connecter avec votre code.
+              </Link>
+            </span>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3.5">
-          <Input
-            label="Nom complet ou raison sociale"
-            placeholder="Ex: Kouamé Serge"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            leftIcon={<UserIcon size={16} />}
-            required
-          />
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Nom & Prénom du promoteur"
+              placeholder="Ex: Claire Mballa"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              leftIcon={<UserIcon size={16} />}
+              required
+            />
+
+            <Input
+              label="Nom de votre Organisation / Tontine"
+              placeholder="Ex: Club Épargne Douala"
+              value={organizationName}
+              onChange={(e) => setOrganizationName(e.target.value)}
+              leftIcon={<Building size={16} />}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              label="Téléphone Mobile Money (Réception)"
+              type="tel"
+              placeholder="+237 6 xx xx xx xx"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              leftIcon={<Phone size={16} />}
+              required
+            />
+
+            <Input
+              label="Adresse Email"
+              type="email"
+              placeholder="modérateur@exemple.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              leftIcon={<Mail size={16} />}
+              required
+            />
+          </div>
 
           <Input
-            label="Adresse email"
-            type="email"
-            placeholder="nom@exemple.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            leftIcon={<Mail size={16} />}
-            required
-          />
-
-          <Input
-            label="Numéro de téléphone (Mobile Money)"
-            placeholder="+237 6 xx xx xx xx"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            leftIcon={<Phone size={16} />}
-            required
-            helperText="Nécessaire pour les notifications et les transferts."
-          />
-
-          <Input
-            label="Mot de passe"
+            label="Mot de passe secret"
             type="password"
-            placeholder="Minimum 8 caractères"
+            placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             leftIcon={<Lock size={16} />}
             required
           />
 
+          {/* Subscription plan selection */}
+          <div className="pt-2">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-2">
+              Choisissez votre formule d'abonnement mensuel (14 jours d'essai offerts) :
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {plans.map((p) => {
+                const isSelected = planId === p.id;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPlanId(p.id)}
+                    className={`p-3 rounded-xl border text-left cursor-pointer transition-all relative ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-200 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                    }`}
+                  >
+                    {p.badge && (
+                      <span className="absolute -top-2 right-2 px-1.5 py-0.2 bg-emerald-600 text-white text-[9px] font-bold rounded-md">
+                        {p.badge}
+                      </span>
+                    )}
+                    <span className="text-xs font-bold block">{p.name}</span>
+                    <span className="text-sm font-black font-mono text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                      {formatFCFA(p.price)}
+                      <span className="text-[10px] font-normal text-slate-500">/mois</span>
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
+                      {p.limit}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1.5 flex items-center gap-1">
+              <CheckCircle2 size={12} className="text-emerald-500" />
+              14 jours d'essai gratuit inclus. Aucun prélèvement immédiat requis.
+            </p>
+          </div>
+
           <Button
             type="submit"
             variant="emerald"
             size="md"
-            className="w-full mt-2"
+            className="w-full mt-4"
             isLoading={isLoading}
             rightIcon={<ArrowRight size={16} />}
           >
-            Créer mon compte ({role === 'moderator' ? 'Modérateur' : 'Membre'})
+            Créer mon espace Modérateur
           </Button>
         </form>
 
-        <div className="mt-5 text-center text-xs text-slate-500">
+        <div className="mt-5 text-center text-xs text-slate-500 border-t border-slate-100 dark:border-slate-800 pt-4">
           Vous avez déjà un compte ?{' '}
           <Link
             to="/login"

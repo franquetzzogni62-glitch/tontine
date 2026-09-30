@@ -11,6 +11,7 @@ import {
   WebhookSimulationPayload,
   PenaltyTopupPayload,
   PenaltyTopupResult,
+  SubscriptionPlanId,
 } from '../types';
 import {
   CURRENT_MODERATOR,
@@ -21,6 +22,7 @@ import {
   MOCK_NOTIFICATIONS,
 } from '../mocks/data';
 import { api } from '../services/api';
+import { generate6DigitCode } from '../utils/formatters';
 
 interface AppContextType {
   theme: 'light' | 'dark';
@@ -29,6 +31,20 @@ interface AppContextType {
   switchRole: (role: UserRole) => void;
   setCurrentUser: (user: User) => void;
   logout: () => void;
+  currentMemberGroupId: string | null;
+  setCurrentMemberGroupId: (id: string | null) => void;
+  loginMemberWithCode: (
+    phone: string,
+    accessCode: string
+  ) => Promise<{ success: boolean; group?: TontineGroup; member?: Member; error?: string }>;
+  registerModerator: (data: {
+    name: string;
+    organizationName?: string;
+    email: string;
+    phone: string;
+    planId?: SubscriptionPlanId;
+  }) => Promise<User>;
+  updateSubscription: (planId: SubscriptionPlanId, paymentMethod?: string) => Promise<void>;
   updateUserKyc: (userId: string, kycStatus: KycStatus) => Promise<void>;
   updateUserTrustScore: (userId: string, trustScore: number) => Promise<void>;
 
@@ -36,6 +52,16 @@ interface AppContextType {
   addGroup: (group: Omit<TontineGroup, 'id'>) => Promise<TontineGroup>;
   updateGroup: (id: string, updates: Partial<TontineGroup>) => Promise<void>;
   deleteGroup: (id: string) => Promise<void>;
+  enrollMemberInGroup: (
+    groupId: string,
+    data: {
+      memberId?: string;
+      name: string;
+      phone: string;
+      city?: string;
+      turnOrder?: number;
+    }
+  ) => Promise<{ member: Member; accessCode: string; group: TontineGroup }>;
   advanceGroupRound: (groupId: string) => Promise<void>;
   payoutPot: (groupId: string, force?: boolean, notes?: string) => Promise<any>;
   reorderTurns: (groupId: string, turns: { memberId: string; order: number }[]) => Promise<void>;
@@ -65,7 +91,7 @@ interface AppContextType {
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const PROD_VERSION_KEY = 'tontiflow_prod_v2_clean';
+const PROD_VERSION_KEY = 'tontiflow_saas_multi_v1';
 if (typeof window !== 'undefined' && localStorage.getItem('tontiflow_app_version') !== PROD_VERSION_KEY) {
   localStorage.removeItem('tontiflow_groups');
   localStorage.removeItem('tontiflow_members');
@@ -95,25 +121,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // User state
-  const [currentUser, setCurrentUser] = useState<User>(CURRENT_MODERATOR);
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const saved = localStorage.getItem('tontiflow_current_user');
+    return saved ? JSON.parse(saved) : CURRENT_MODERATOR;
+  });
   const [isBackendConnected, setIsBackendConnected] = useState<boolean>(true);
+
+  const [currentMemberGroupId, setCurrentMemberGroupId] = useState<string | null>(() => {
+    return localStorage.getItem('tontiflow_member_group_id') || 'grp_solidarite_1';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('tontiflow_current_user', JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentMemberGroupId) {
+      localStorage.setItem('tontiflow_member_group_id', currentMemberGroupId);
+    }
+  }, [currentMemberGroupId]);
 
   // Groups state
   const [groups, setGroups] = useState<TontineGroup[]>(() => {
     const saved = localStorage.getItem('tontiflow_groups');
-    return saved ? JSON.parse(saved) : [];
+    return saved && JSON.parse(saved).length > 0 ? JSON.parse(saved) : MOCK_GROUPS;
   });
 
   // Members state
   const [members, setMembers] = useState<Member[]>(() => {
     const saved = localStorage.getItem('tontiflow_members');
-    return saved ? JSON.parse(saved) : [];
+    return saved && JSON.parse(saved).length > 0 ? JSON.parse(saved) : MOCK_MEMBERS;
   });
 
   // Payments state
   const [payments, setPayments] = useState<PaymentTransaction[]>(() => {
     const saved = localStorage.getItem('tontiflow_payments');
-    return saved ? JSON.parse(saved) : [];
+    return saved && JSON.parse(saved).length > 0 ? JSON.parse(saved) : generateMockTransactions();
   });
 
   // Notifications state
@@ -202,6 +245,208 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addToast('Déconnexion réussie', 'Vous avez été déconnecté de votre compte.', 'info');
   };
 
+  const loginMemberWithCode = async (
+    phone: string,
+    code: string
+  ): Promise<{ success: boolean; group?: TontineGroup; member?: Member; error?: string }> => {
+    const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+    const cleanCode = code.replace(/\s+/g, '').trim();
+
+    if (!cleanPhone || !cleanCode) {
+      return {
+        success: false,
+        error: 'Veuillez renseigner votre numéro de téléphone et votre code à 6 chiffres.',
+      };
+    }
+
+    // Search across all groups for a member with matching phone and accessCode
+    let matchedGroup: TontineGroup | undefined;
+    let matchedMember: Member | undefined;
+
+    for (const grp of groups) {
+      const foundInGroup = grp.members.find((m) => {
+        const memObj = members.find((mb) => mb.id === m.memberId);
+        const mPhone = (memObj?.phone || '').replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+        const phoneMatches = mPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(mPhone.slice(-8));
+        const codeMatches = (m.accessCode || '').replace(/\s+/g, '') === cleanCode;
+        return phoneMatches && codeMatches;
+      });
+
+      const foundInSchedule = grp.beneficiarySchedule.find((b) => {
+        const bPhone = (b.memberPhone || '').replace(/[\s\-\(\)\+]/g, '').toLowerCase();
+        const phoneMatches = bPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(bPhone.slice(-8));
+        const codeMatches = (b.accessCode || '').replace(/\s+/g, '') === cleanCode;
+        return phoneMatches && codeMatches;
+      });
+
+      if (foundInGroup || foundInSchedule) {
+        matchedGroup = grp;
+        const targetMemberId = foundInGroup?.memberId || foundInSchedule?.memberId;
+        matchedMember = members.find((mb) => mb.id === targetMemberId);
+        if (!matchedMember && foundInSchedule) {
+          matchedMember = {
+            id: foundInSchedule.memberId,
+            name: foundInSchedule.memberName,
+            phone: foundInSchedule.memberPhone,
+            email: `${foundInSchedule.memberId}@tontiflow.africa`,
+            city: 'Douala',
+            trustScore: 98,
+            kycStatus: 'verified',
+            joinedDate: new Date().toISOString().split('T')[0],
+            groupsCount: 1,
+            totalContributed: 0,
+            totalReceived: 0,
+            status: 'active',
+          };
+        }
+        break;
+      }
+    }
+
+    if (!matchedGroup || !matchedMember) {
+      return {
+        success: false,
+        error: 'Numéro de téléphone ou code d\'accès à 6 chiffres incorrect pour cette tontine.',
+      };
+    }
+
+    const memberUser: User = {
+      id: matchedMember.id,
+      name: matchedMember.name,
+      firstName: matchedMember.firstName || matchedMember.name.split(' ')[0],
+      lastName: matchedMember.lastName || '',
+      email: matchedMember.email || `${matchedMember.id}@tontiflow.africa`,
+      phone: matchedMember.phone,
+      whatsappNumber: matchedMember.phone,
+      role: 'member',
+      trustScore: matchedMember.trustScore || 95,
+      kycStatus: matchedMember.kycStatus || 'verified',
+      city: matchedMember.city || 'Douala',
+      country: 'Cameroun',
+    };
+
+    setCurrentUser(memberUser);
+    setCurrentMemberGroupId(matchedGroup.id);
+    localStorage.setItem(
+      'tontiflow_user_session',
+      JSON.stringify({ role: 'member', user: memberUser, groupId: matchedGroup.id })
+    );
+
+    addToast(
+      'Accès autorisé',
+      `Bienvenue ${matchedMember.name} dans la tontine « ${matchedGroup.name} » !`,
+      'success'
+    );
+
+    return { success: true, group: matchedGroup, member: matchedMember };
+  };
+
+  const registerModerator = async (data: {
+    name: string;
+    organizationName?: string;
+    email: string;
+    phone: string;
+    planId?: SubscriptionPlanId;
+  }): Promise<User> => {
+    const plan = data.planId || 'pro';
+    const prices: Record<SubscriptionPlanId, number> = {
+      starter: 5000,
+      pro: 15000,
+      enterprise: 30000,
+    };
+    const planNames: Record<SubscriptionPlanId, string> = {
+      starter: 'Formule Starter',
+      pro: 'Formule Pro',
+      enterprise: 'Formule Entreprise',
+    };
+
+    const newMod: User = {
+      id: `user_mod_${Date.now()}`,
+      name: data.name,
+      organizationName: data.organizationName || 'Réseau Tontines Indépendant',
+      firstName: data.name.split(' ')[0] || data.name,
+      lastName: data.name.split(' ').slice(1).join(' ') || '',
+      email: data.email,
+      phone: data.phone,
+      whatsappNumber: data.phone,
+      role: 'moderator',
+      trustScore: 100,
+      kycStatus: 'verified',
+      city: 'Douala',
+      country: 'Cameroun',
+      subscription: {
+        planId: plan,
+        planName: planNames[plan],
+        pricePerMonth: prices[plan],
+        status: 'active',
+        startedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        paymentMethod: 'Orange Money',
+        autoRenew: true,
+        maxGroups: plan === 'starter' ? 3 : 999,
+      },
+    };
+
+    setCurrentUser(newMod);
+    localStorage.setItem('tontiflow_current_user', JSON.stringify(newMod));
+    addToast(
+      'Compte Modérateur créé !',
+      `Bienvenue sur TontiFlow. Votre formule ${planNames[plan]} (14 jours d'essai offerts) est activée.`,
+      'success'
+    );
+    return newMod;
+  };
+
+  const updateSubscription = async (planId: SubscriptionPlanId, paymentMethod = 'Orange Money') => {
+    const prices: Record<SubscriptionPlanId, number> = {
+      starter: 5000,
+      pro: 15000,
+      enterprise: 30000,
+    };
+    const planNames: Record<SubscriptionPlanId, string> = {
+      starter: 'Formule Starter',
+      pro: 'Formule Pro',
+      enterprise: 'Formule Entreprise',
+    };
+
+    const updatedUser: User = {
+      ...currentUser,
+      subscription: {
+        planId,
+        planName: planNames[planId],
+        pricePerMonth: prices[planId],
+        status: 'active',
+        startedAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        paymentMethod,
+        autoRenew: true,
+        maxGroups: planId === 'starter' ? 3 : 999,
+      },
+    };
+
+    setCurrentUser(updatedUser);
+    localStorage.setItem('tontiflow_current_user', JSON.stringify(updatedUser));
+
+    // Synchroniser avec le serveur backend
+    try {
+      await fetch('/api/subscriptions/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: currentUser.id,
+          planId,
+          paymentMethod,
+        }),
+      });
+    } catch {}
+
+    addToast(
+      'Abonnement renouvelé !',
+      `Votre forfait ${planNames[planId]} est actif pour 30 jours supplémentaires.`,
+      'success'
+    );
+  };
+
   const updateUserKyc = async (userId: string, kycStatus: KycStatus) => {
     try {
       const res = await api.updateKycStatus(userId, kycStatus);
@@ -231,16 +476,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Group methods connected to Backend API
   const addGroup = async (groupData: Omit<TontineGroup, 'id'>): Promise<TontineGroup> => {
+    // Ensure every member has a 6-digit access code
+    const membersWithCodes = (groupData.members || []).map((m) => ({
+      ...m,
+      accessCode: m.accessCode || generate6DigitCode(`${m.memberId}_${Date.now()}`),
+    }));
+
+    const scheduleWithCodes = (groupData.beneficiarySchedule || []).map((b) => {
+      const match = membersWithCodes.find((m) => m.memberId === b.memberId);
+      return {
+        ...b,
+        accessCode: b.accessCode || match?.accessCode || generate6DigitCode(`${b.memberId}_${Date.now()}`),
+      };
+    });
+
+    const enrichedData = {
+      ...groupData,
+      moderatorId: groupData.moderatorId || currentUser.id,
+      members: membersWithCodes,
+      beneficiarySchedule: scheduleWithCodes,
+    };
+
     try {
-      const serverGroup = await api.createGroup(groupData);
+      const serverGroup = await api.createGroup(enrichedData);
       setGroups((prev) => [serverGroup, ...prev.filter((g) => g.id !== serverGroup.id)]);
-      addToast('Tontine créée avec succès', `${serverGroup.name} enregistrée sur le serveur backend.`, 'success');
+      addToast('Tontine créée avec succès', `${serverGroup.name} enregistrée avec codes d'accès membres à 6 chiffres.`, 'success');
       return serverGroup;
     } catch {
       const newId = `grp_${Date.now()}`;
-      const newGroup: TontineGroup = { ...groupData, id: newId };
+      const newGroup: TontineGroup = { ...enrichedData, id: newId };
       setGroups((prev) => [newGroup, ...prev]);
-      addToast('Tontine créée (mode local)', `${newGroup.name} enregistrée.`, 'success');
+      addToast('Tontine créée avec succès', `${newGroup.name} enregistrée avec codes d'accès membres à 6 chiffres.`, 'success');
       return newGroup;
     }
   };
@@ -264,6 +530,119 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     setGroups((prev) => prev.filter((g) => g.id !== id));
     addToast('Tontine archivée', 'Le groupe a été retiré de la liste active.', 'info');
+  };
+
+  const enrollMemberInGroup = async (
+    groupId: string,
+    data: {
+      memberId?: string;
+      name: string;
+      phone: string;
+      city?: string;
+      turnOrder?: number;
+    }
+  ): Promise<{ member: Member; accessCode: string; group: TontineGroup }> => {
+    const targetGroup = groups.find((g) => g.id === groupId);
+    if (!targetGroup) {
+      throw new Error('Tontine introuvable');
+    }
+
+    // 1. Resolve or create member
+    let member: Member;
+    if (data.memberId) {
+      const found = members.find((m) => m.id === data.memberId);
+      if (!found) throw new Error('Membre introuvable');
+      member = found;
+    } else {
+      const cleanInputPhone = data.phone.replace(/\D/g, '');
+      const existingByPhone = members.find(
+        (m) => m.phone.replace(/\D/g, '').endsWith(cleanInputPhone.slice(-8))
+      );
+      if (existingByPhone) {
+        member = existingByPhone;
+      } else {
+        const parts = data.name.trim().split(' ');
+        const newMem = await addMember({
+          name: data.name.trim(),
+          firstName: parts[0] || data.name,
+          lastName: parts.slice(1).join(' ') || '',
+          phone: data.phone.trim(),
+          email: `${parts[0].toLowerCase()}_${Date.now().toString().slice(-4)}@tontine.africa`,
+          city: data.city || 'Douala',
+          trustScore: 95,
+          kycStatus: 'verified',
+          joinedDate: new Date().toISOString().split('T')[0],
+          groupsCount: 1,
+          totalContributed: 0,
+          totalReceived: 0,
+          status: 'active',
+          presenceValidated: true,
+        });
+        member = newMem;
+      }
+    }
+
+    // 2. Generate unique 6-digit access code for this member in THIS tontine
+    const accessCode = generate6DigitCode(`${member.id}_${groupId}_${Date.now()}`);
+
+    // 3. Compute turn order and pot amounts
+    const turnOrder = data.turnOrder || (targetGroup.members.length + 1);
+    const newTotalMembers = targetGroup.members.length + 1;
+    const netPerMember = targetGroup.contributionAmount - targetGroup.moderatorCommission;
+    const newPotAmount = netPerMember * newTotalMembers;
+
+    // 4. Create new TontineGroupMember
+    const newGroupMember = {
+      memberId: member.id,
+      turnOrder,
+      accessCode,
+      hasPaidToday: false,
+      totalContributedInGroup: 0,
+      presenceValidated: true,
+      status: 'active' as const,
+    };
+
+    // 5. Create new BeneficiaryTurn
+    const nextDate = new Date();
+    nextDate.setDate(nextDate.getDate() + (turnOrder - 1));
+    const newTurn = {
+      order: turnOrder,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: member.phone,
+      scheduledDate: nextDate.toISOString().split('T')[0],
+      potAmount: newPotAmount,
+      status: 'upcoming' as const,
+      accessCode,
+    };
+
+    const updatedMembers = [...targetGroup.members, newGroupMember];
+    const updatedSchedule = [...targetGroup.beneficiarySchedule, newTurn].map((b) => ({
+      ...b,
+      potAmount: newPotAmount,
+    }));
+
+    const updatedGroupData: Partial<TontineGroup> = {
+      totalMembersCount: newTotalMembers,
+      potAmount: newPotAmount,
+      members: updatedMembers,
+      beneficiarySchedule: updatedSchedule,
+    };
+
+    await updateGroup(groupId, updatedGroupData);
+
+    const fullUpdatedGroup: TontineGroup = {
+      ...targetGroup,
+      ...updatedGroupData,
+    };
+
+    addToast(
+      'Membre inscrit à la tontine !',
+      `${member.name} a été ajouté(e). Code secret d'accès : ${accessCode}`,
+      'success'
+    );
+
+    return { member, accessCode, group: fullUpdatedGroup };
   };
 
   const advanceGroupRound = async (groupId: string) => {
@@ -567,12 +946,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         switchRole,
         setCurrentUser,
         logout,
+        currentMemberGroupId,
+        setCurrentMemberGroupId,
+        loginMemberWithCode,
+        registerModerator,
+        updateSubscription,
         updateUserKyc,
         updateUserTrustScore,
         groups,
         addGroup,
         updateGroup,
         deleteGroup,
+        enrollMemberInGroup,
         advanceGroupRound,
         payoutPot,
         reorderTurns,

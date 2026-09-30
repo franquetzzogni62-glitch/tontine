@@ -10,6 +10,7 @@ import { Avatar } from '../../components/ui/Avatar';
 import { Input } from '../../components/ui/Input';
 import { RecordPaymentModal } from '../../components/modals/RecordPaymentModal';
 import { InviteModal } from '../../components/modals/InviteModal';
+import { EnrollMemberModal } from '../../components/modals/EnrollMemberModal';
 import { PayoutPotModal } from '../../components/modals/PayoutPotModal';
 import { ReceiptModal } from '../../components/modals/ReceiptModal';
 import { FinancialSummaryWidget } from '../../components/FinancialSummaryWidget';
@@ -40,8 +41,17 @@ import {
   FileText,
   AlertTriangle,
   RotateCw,
+  Copy,
+  KeyRound,
+  UserPlus,
 } from 'lucide-react';
-import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
+import {
+  formatFCFA,
+  formatDate,
+  formatDateTime,
+  formatAccessCode,
+  generate6DigitCode,
+} from '../../utils/formatters';
 
 export const GroupDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -63,6 +73,7 @@ export const GroupDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'register' | 'admin' | 'calendar' | 'payments' | 'settings'>('overview');
   const [recordModalOpen, setRecordModalOpen] = useState(false);
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [enrollModalOpen, setEnrollModalOpen] = useState(false);
   const [payoutModalOpen, setPayoutModalOpen] = useState(false);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
   const [regularizeModalOpen, setRegularizeModalOpen] = useState(false);
@@ -122,6 +133,20 @@ export const GroupDetailPage: React.FC = () => {
 
   const handleSendReminder = (phone: string, name: string) => {
     addToast('Relance envoyée', `Un SMS & message WhatsApp de relance ont été envoyés à ${name} (${phone}).`, 'info');
+  };
+
+  const handleCopyAccessCode = (code: string, memberName: string) => {
+    navigator.clipboard?.writeText(code);
+    addToast('Code secret copié !', `Code à 6 chiffres de ${memberName} (${code}) copié dans le presse-papiers.`, 'success');
+  };
+
+  const handleShareWhatsApp = (phone: string, name: string, code: string, groupTitle: string) => {
+    const text = encodeURIComponent(
+      `Bonjour ${name},\nVous avez été inscrit(e) à la tontine « ${groupTitle} » sur TontiFlow.\n\n` +
+      `🔑 Votre CODE PERSONNEL à 6 chiffres pour accéder à votre tableau de bord cotisant est : ${code}\n\n` +
+      `Connectez-vous avec votre numéro (${phone}) et votre code sur : ${window.location.origin}/login`
+    );
+    window.open(`https://wa.me/?text=${text}`, '_blank');
   };
 
   const handleArchive = () => {
@@ -194,6 +219,15 @@ export const GroupDetailPage: React.FC = () => {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="emerald"
+            size="sm"
+            onClick={() => setEnrollModalOpen(true)}
+            leftIcon={<UserPlus size={14} />}
+          >
+            Inscrire un membre
+          </Button>
+
           <Button
             variant="outline"
             size="sm"
@@ -432,6 +466,15 @@ export const GroupDetailPage: React.FC = () => {
 
               <div className="flex items-center gap-2">
                 <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEnrollModalOpen(true)}
+                  leftIcon={<UserPlus size={15} />}
+                >
+                  Inscrire un membre
+                </Button>
+
+                <Button
                   variant="emerald"
                   size="sm"
                   onClick={() => {
@@ -453,6 +496,7 @@ export const GroupDetailPage: React.FC = () => {
                   <th className="pb-3 px-3">Tour</th>
                   <th className="pb-3 px-3">Membre participant</th>
                   <th className="pb-3 px-3">Téléphone</th>
+                  <th className="pb-3 px-3">Code 6 chiffres</th>
                   <th className="pb-3 px-3">Score Confiance</th>
                   <th className="pb-3 px-3 text-center">Statut Cotisation Tour #{group.currentDay}</th>
                   <th className="pb-3 px-3 text-right">Cotisé ce tour</th>
@@ -500,6 +544,46 @@ export const GroupDetailPage: React.FC = () => {
 
                       <td className="py-3.5 px-3 font-mono text-slate-500">
                         {memberInfo?.phone}
+                      </td>
+
+                      <td className="py-3.5 px-3">
+                        {(() => {
+                          const schedTurn = group.beneficiarySchedule.find((b) => b.memberId === gm.memberId);
+                          const memberAccessCode =
+                            gm.accessCode ||
+                            schedTurn?.accessCode ||
+                            generate6DigitCode(gm.memberId + group.id);
+                          return (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold tracking-wider px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs border border-slate-200 dark:border-slate-700">
+                                {formatAccessCode(memberAccessCode)}
+                              </span>
+                              <button
+                                onClick={() =>
+                                  handleCopyAccessCode(memberAccessCode, memberInfo?.name || '')
+                                }
+                                className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                                title="Copier le code à 6 chiffres"
+                              >
+                                <Copy size={13} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleShareWhatsApp(
+                                    memberInfo?.phone || '',
+                                    memberInfo?.name || '',
+                                    memberAccessCode,
+                                    group.name
+                                  )
+                                }
+                                className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded transition-colors cursor-pointer"
+                                title="Envoyer le code au membre par WhatsApp"
+                              >
+                                <Share2 size={13} />
+                              </button>
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       <td className="py-3.5 px-3">
@@ -624,6 +708,32 @@ export const GroupDetailPage: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'admin' && (
         <div className="space-y-6">
+          {/* Inscription Membres & Remise de code secret à 6 chiffres */}
+          <Card className="p-5 border-emerald-500/20 bg-emerald-50/20 dark:bg-emerald-950/10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <KeyRound className="text-emerald-500" size={18} />
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Inscrire un membre & Générer son code d'accès à 6 chiffres
+                  </h3>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xl">
+                  Seul le modérateur inscrit les membres de sa tontine et leur remet leur code secret à 6 chiffres personnel. Le membre utilise son numéro et ce code unique pour se connecter et voir son tableau de bord cotisant.
+                </p>
+              </div>
+
+              <Button
+                variant="emerald"
+                size="md"
+                onClick={() => setEnrollModalOpen(true)}
+                leftIcon={<UserPlus size={16} />}
+              >
+                Inscrire un membre
+              </Button>
+            </div>
+          </Card>
+
           {/* Quick Payout Disbursement Section */}
           <Card className="p-5 border-emerald-500/30 bg-gradient-to-r from-emerald-50/40 dark:from-emerald-950/20 to-transparent">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -874,6 +984,12 @@ export const GroupDetailPage: React.FC = () => {
         onClose={() => setInviteModalOpen(false)}
         groupId={group.id}
         groupName={group.name}
+      />
+
+      <EnrollMemberModal
+        isOpen={enrollModalOpen}
+        onClose={() => setEnrollModalOpen(false)}
+        group={group}
       />
 
       <PayoutPotModal

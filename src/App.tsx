@@ -24,6 +24,7 @@ import { MembersPage } from './pages/dashboard/MembersPage';
 import { PaymentsPage } from './pages/dashboard/PaymentsPage';
 import { ReportsPage } from './pages/dashboard/ReportsPage';
 import { SettingsPage } from './pages/dashboard/SettingsPage';
+import { SubscriptionPage } from './pages/dashboard/SubscriptionPage';
 
 // Member view
 import { MemberPortalPage } from './pages/member/MemberPortalPage';
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="members" element={<MembersPage />} />
             <Route path="payments" element={<PaymentsPage />} />
             <Route path="reports" element={<ReportsPage />} />
+            <Route path="subscription" element={<SubscriptionPage />} />
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 

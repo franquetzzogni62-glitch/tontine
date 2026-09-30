@@ -2,9 +2,24 @@ export type UserRole = 'admin' | 'moderator' | 'member';
 export type KycStatus = 'unverified' | 'pending' | 'verified';
 export type TontineType = 'rotative' | 'enchere' | 'sociale';
 
+export type SubscriptionPlanId = 'starter' | 'pro' | 'enterprise';
+
+export interface ModeratorSubscription {
+  planId: SubscriptionPlanId;
+  planName: string;
+  pricePerMonth: number;
+  status: 'active' | 'trial' | 'expired';
+  startedAt: string; // ISO date
+  expiresAt: string; // ISO date
+  paymentMethod?: string;
+  autoRenew: boolean;
+  maxGroups: number;
+}
+
 export interface User {
   id: string;
   name: string;
+  organizationName?: string; // Nom de l'organisation / réseau de tontines
   firstName?: string;
   lastName?: string;
   email: string;
@@ -16,6 +31,7 @@ export interface User {
   kycStatus: KycStatus;
   city?: string;
   country?: string;
+  subscription?: ModeratorSubscription;
 }
 
 export type Frequency = 'daily' | 'weekly' | 'monthly';
@@ -41,11 +57,13 @@ export interface BeneficiaryTurn {
   status: 'completed' | 'current' | 'upcoming';
   payoutReference?: string;
   paidOutAt?: string;
+  accessCode?: string; // Code à 6 chiffres attribué au membre pour cette tontine
 }
 
 export interface Member {
   id: string;
   name: string;
+  moderatorId?: string; // ID du modérateur propriétaire
   firstName?: string;
   lastName?: string;
   phone: string;
@@ -67,6 +85,7 @@ export interface Member {
 export interface TontineGroupMember {
   memberId: string;
   turnOrder: number;
+  accessCode?: string; // Code unique à 6 chiffres pour accéder à ce groupe
   hasPaidToday: boolean;
   totalContributedInGroup: number;
   presenceValidated?: boolean;

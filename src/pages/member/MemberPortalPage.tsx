@@ -31,11 +31,32 @@ import {
   Coins,
   Users2,
   LogOut,
+  KeyRound,
+  Copy,
+  Building,
 } from 'lucide-react';
-import { formatFCFA, formatDate, formatDateTime } from '../../utils/formatters';
+import {
+  formatFCFA,
+  formatDate,
+  formatDateTime,
+  formatAccessCode,
+  generate6DigitCode,
+} from '../../utils/formatters';
 
 export const MemberPortalPage: React.FC = () => {
-  const { currentUser, switchRole, logout, groups, members, payments, theme, toggleTheme } = useApp();
+  const {
+    currentUser,
+    switchRole,
+    logout,
+    groups,
+    members,
+    payments,
+    theme,
+    toggleTheme,
+    currentMemberGroupId,
+    setCurrentMemberGroupId,
+    addToast,
+  } = useApp();
   const navigate = useNavigate();
 
   const [selectedGroupToPay, setSelectedGroupToPay] = useState<TontineGroup | null>(null);
@@ -60,37 +81,83 @@ export const MemberPortalPage: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Find groups where this user is participating
-  const myGroups = groups.filter((g) =>
-    g.members.some((m) => m.memberId === currentUser.id || m.memberId === 'mem_2')
-  );
+  const cleanPhone = (currentUser.phone || '').replace(/[\s\-\(\)\+]/g, '');
+
+  // Find all groups where this user is participating (by id or by phone)
+  const myGroups = groups.filter((g) => {
+    const inMembers = g.members.some((m) => {
+      if (m.memberId === currentUser.id) return true;
+      const memObj = members.find((mb) => mb.id === m.memberId);
+      const mPhone = (memObj?.phone || '').replace(/[\s\-\(\)\+]/g, '');
+      return cleanPhone && (mPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(mPhone.slice(-8)));
+    });
+
+    const inSched = g.beneficiarySchedule.some((b) => {
+      if (b.memberId === currentUser.id) return true;
+      const bPhone = (b.memberPhone || '').replace(/[\s\-\(\)\+]/g, '');
+      return cleanPhone && (bPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(bPhone.slice(-8)));
+    });
+
+    return inMembers || inSched;
+  });
 
   const displayGroups = myGroups.length > 0 ? myGroups : groups.slice(0, 2);
 
-  // Check if it's "MY TURN" in any of the groups
+  // Active group selected (from context or first available)
+  const activeGroup =
+    displayGroups.find((g) => g.id === currentMemberGroupId) ||
+    displayGroups[0] ||
+    groups[0];
+
+  const getMemberAccessCodeForGroup = (grp: TontineGroup) => {
+    const gm = grp.members.find(
+      (m) =>
+        m.memberId === currentUser.id ||
+        members.find((mb) => mb.id === m.memberId)?.phone.replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
+    );
+    const sched = grp.beneficiarySchedule.find(
+      (b) =>
+        b.memberId === currentUser.id ||
+        (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
+    );
+    return gm?.accessCode || sched?.accessCode || generate6DigitCode(currentUser.id + grp.id);
+  };
+
+  const activeGroupAccessCode = getMemberAccessCodeForGroup(activeGroup);
+
+  // Check if it's "MY TURN" in the active group or any other
   const myActivePotTurn = displayGroups.find((g) => {
     const myTurn = g.beneficiarySchedule.find(
-      (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
+      (b) =>
+        b.memberId === currentUser.id ||
+        (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
     );
     return myTurn && myTurn.order === g.currentDay && myTurn.status !== 'completed';
   });
 
-  const myTurnInfo = myActivePotTurn
-    ? myActivePotTurn.beneficiarySchedule.find(
-        (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
-      )
-    : displayGroups[0]?.beneficiarySchedule.find(
-        (b) => b.memberId === currentUser.id || b.memberId === 'mem_2'
-      );
+  const myTurnInfo = activeGroup.beneficiarySchedule.find(
+    (b) =>
+      b.memberId === currentUser.id ||
+      (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
+  ) || activeGroup.beneficiarySchedule[0];
 
-  const primaryGroup = myActivePotTurn || displayGroups[0];
+  const primaryGroup = activeGroup;
 
   const myPayments = payments.filter(
-    (p) => p.memberId === currentUser.id || p.memberId === 'mem_2'
+    (p) =>
+      p.memberId === currentUser.id ||
+      p.memberPhone.replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
   );
 
-  const currentMember = members.find((m) => m.id === currentUser.id || m.id === 'mem_2') || members[0];
-  const isGuaranteeDepleted = currentMember?.status === 'GUARANTEE_DEPLETED' || (currentMember?.status as string) === 'guarantee_depleted';
+  const currentMember =
+    members.find(
+      (m) =>
+        m.id === currentUser.id ||
+        m.phone.replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
+    ) || members[0];
+  const isGuaranteeDepleted =
+    currentMember?.status === 'GUARANTEE_DEPLETED' ||
+    (currentMember?.status as string) === 'guarantee_depleted';
 
   const totalIContributed = myPayments
     .filter((p) => p.status === 'paid')
@@ -157,6 +224,98 @@ export const MemberPortalPage: React.FC = () => {
 
       {/* Main Container */}
       <main className="flex-1 max-w-xl w-full mx-auto p-4 space-y-5 text-left">
+        {/* ========================================================================= */}
+        {/* MULTI-TONTINES SWITCHER (MÊME NUMÉRO, CODES DIFFÉRENTS) */}
+        {/* ========================================================================= */}
+        {displayGroups.length > 1 && (
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                  Mes Tontines ({displayGroups.length})
+                </span>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                  Basculez entre vos tontines actives :
+                </span>
+              </div>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-bold border border-emerald-500/20">
+                Multi-tontines
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {displayGroups.map((grp) => {
+                const isSelected = grp.id === activeGroup.id;
+                const grpCode = getMemberAccessCodeForGroup(grp);
+                return (
+                  <button
+                    key={grp.id}
+                    type="button"
+                    onClick={() => {
+                      setCurrentMemberGroupId(grp.id);
+                      addToast('Tontine sélectionnée', `Affichage de ${grp.name}.`, 'info');
+                    }}
+                    className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 ring-1 ring-emerald-500'
+                        : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 bg-slate-50/50 dark:bg-slate-800/40'
+                    }`}
+                  >
+                    <div className="min-w-0 pr-2">
+                      <span className="font-bold text-xs text-slate-900 dark:text-white block truncate">
+                        {grp.name}
+                      </span>
+                      <span className="text-[11px] text-slate-500 block">
+                        Cotisation : {formatFCFA(grp.contributionAmount)}
+                      </span>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="text-[9px] text-slate-400 block uppercase font-medium">Code secret</span>
+                      <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400">
+                        {formatAccessCode(grpCode)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Active Tontine Context Info Banner */}
+        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+              <Building size={18} />
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                {activeGroup.name}
+              </h2>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                Tour #{activeGroup.currentDay} en cours · Cycle #{activeGroup.currentCycle}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+              <KeyRound size={12} className="text-emerald-500" />
+              {formatAccessCode(activeGroupAccessCode)}
+            </span>
+            <button
+              onClick={() => {
+                navigator.clipboard?.writeText(activeGroupAccessCode);
+                addToast('Code copié !', 'Votre code d\'accès à 6 chiffres a été copié.', 'success');
+              }}
+              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              title="Copier mon code"
+            >
+              <Copy size={13} />
+            </button>
+          </div>
+        </div>
         {/* ========================================================================= */}
         {/* SPECIAL HIGHLIGHT BANNER: C'EST MON TOUR DE RECEVOIR LE POT ! */}
         {/* ========================================================================= */}

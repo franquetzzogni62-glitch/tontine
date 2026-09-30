@@ -23,8 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 // 2. Configuration & Secrets
-$SASPAY_API_KEY = getenv('SASPAY_API_KEY') ?: 'sk_live_demo_sasapay_key';
-$SASPAY_BASE_URL = getenv('SASPAY_BASE_URL') ?: 'https://api.sasapay.app/v1';
+$SASPAY_API_KEY = getenv('SASPAY_API_KEY') ?: 'sk_live_dpveGiiFhSgw8zT6cWGYBQkXlTnqth1VfDDHctYD__w';
+$envBaseUrl = trim(getenv('SASPAY_BASE_URL') ?: '');
+$SASPAY_BASE_URL = strpos($envBaseUrl, 'saspay.me') !== false ? $envBaseUrl : 'https://api.saspay.me/api/v1';
 
 // Helper: Make cURL request with Bearer Auth
 function callSasaPayAPI($url, $method = 'GET', $data = null, $apiKey = '') {
@@ -148,16 +149,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $payload = [
         'amount' => $amount,
         'currency' => $currency,
-        'order_id' => $orderId,
+        'description' => isset($input['description']) ? $input['description'] : ('Paiement TontiFlow - ' . $customerName),
         'customer_email' => $customerEmail,
         'customer_phone' => $customerPhone,
         'customer_name' => $customerName,
         'metadata' => $metadata,
-        'callback_url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/public/webhook/saspay.php',
         'return_url' => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http') . '://' . $_SERVER['HTTP_HOST'] . '/payment/processing?orderId=' . urlencode($orderId) . '&amount=' . urlencode($amount) . '&currency=' . urlencode($currency)
     ];
 
-    $url = rtrim($SASPAY_BASE_URL, '/') . '/payments/create-session';
+    $url = rtrim($SASPAY_BASE_URL, '/') . '/checkout-sessions/';
     $apiResult = callSasaPayAPI($url, 'POST', $payload, $SASPAY_API_KEY);
 
     $checkoutUrl = '';

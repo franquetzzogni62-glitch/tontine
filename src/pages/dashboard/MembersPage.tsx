@@ -21,11 +21,20 @@ import {
   UserX,
   UserCheck2,
   Users,
+  KeyRound,
+  Copy,
+  Share2,
 } from 'lucide-react';
-import { formatFCFA, formatDate, exportToCSV } from '../../utils/formatters';
+import {
+  formatFCFA,
+  formatDate,
+  exportToCSV,
+  formatAccessCode,
+  generate6DigitCode,
+} from '../../utils/formatters';
 
 export const MembersPage: React.FC = () => {
-  const { members, updateMember, addToast } = useApp();
+  const { members, groups, updateMember, addToast } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -170,7 +179,7 @@ export const MembersPage: React.FC = () => {
                   <th className="pb-3 px-3">Membre</th>
                   <th className="pb-3 px-3">Téléphone & Ville</th>
                   <th className="pb-3 px-3 text-center">Score Confiance</th>
-                  <th className="pb-3 px-3 text-center">Groupes</th>
+                  <th className="pb-3 px-3">Tontines & Codes 6 chiffres</th>
                   <th className="pb-3 px-3 text-right">Total cotisé</th>
                   <th className="pb-3 px-3 text-center">Statut</th>
                   <th className="pb-3 px-3 text-right">Actions</th>
@@ -206,8 +215,93 @@ export const MembersPage: React.FC = () => {
                       </div>
                     </td>
 
-                    <td className="py-3 px-3 text-center font-mono font-semibold text-slate-700 dark:text-slate-300">
-                      {member.groupsCount}
+                    <td className="py-3 px-3">
+                      {(() => {
+                        const cleanP = member.phone.replace(/\D/g, '');
+                        const memberGroups = groups.filter((g) =>
+                          g.members.some(
+                            (m) =>
+                              m.memberId === member.id ||
+                              members
+                                .find((mb) => mb.id === m.memberId)
+                                ?.phone.replace(/\D/g, '')
+                                .endsWith(cleanP.slice(-8))
+                          ) ||
+                          g.beneficiarySchedule.some(
+                            (b) =>
+                              b.memberId === member.id ||
+                              (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanP.slice(-8))
+                          )
+                        );
+
+                        if (memberGroups.length === 0) {
+                          return <span className="text-[11px] text-slate-400">Aucun groupe</span>;
+                        }
+
+                        return (
+                          <div className="space-y-1.5">
+                            {memberGroups.map((g) => {
+                              const gm = g.members.find(
+                                (m) =>
+                                  m.memberId === member.id ||
+                                  members
+                                    .find((mb) => mb.id === m.memberId)
+                                    ?.phone.replace(/\D/g, '')
+                                    .endsWith(cleanP.slice(-8))
+                              );
+                              const sched = g.beneficiarySchedule.find(
+                                (b) =>
+                                  b.memberId === member.id ||
+                                  (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanP.slice(-8))
+                              );
+                              const code =
+                                gm?.accessCode ||
+                                sched?.accessCode ||
+                                generate6DigitCode(member.id + g.id);
+
+                              return (
+                                <div key={g.id} className="flex items-center gap-1.5">
+                                  <span
+                                    className="text-[11px] font-medium text-slate-700 dark:text-slate-300 truncate max-w-[100px]"
+                                    title={g.name}
+                                  >
+                                    {g.name} :
+                                  </span>
+                                  <span className="font-mono font-bold text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-500/20">
+                                    {formatAccessCode(code)}
+                                  </span>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard?.writeText(code);
+                                      addToast(
+                                        'Code copié !',
+                                        `Code de ${member.name} (${code}) copié.`,
+                                        'success'
+                                      );
+                                    }}
+                                    className="p-0.5 text-slate-400 hover:text-emerald-600 transition-colors cursor-pointer"
+                                    title="Copier le code"
+                                  >
+                                    <Copy size={12} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const text = encodeURIComponent(
+                                        `Bonjour ${member.name},\nVoici votre code d'accès à 6 chiffres pour la tontine « ${g.name} » : ${code}.\nConnectez-vous sur ${window.location.origin}/login avec votre numéro (${member.phone}) et ce code.`
+                                      );
+                                      window.open(`https://wa.me/?text=${text}`, '_blank');
+                                    }}
+                                    className="p-0.5 text-emerald-600 hover:text-emerald-700 transition-colors cursor-pointer"
+                                    title="Partager par WhatsApp"
+                                  >
+                                    <Share2 size={12} />
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </td>
 
                     <td className="py-3 px-3 text-right font-mono font-bold tabular-nums text-slate-900 dark:text-white">

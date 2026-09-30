@@ -338,17 +338,66 @@ export const api = {
     return handleResponse(res);
   },
 
-  async getSasPayStatus(orderId: string, sessionId?: string): Promise<{
+  async getSasPayStatus(orderId: string, sessionId?: string, confirm?: boolean): Promise<{
     success: boolean;
     status: 'completed' | 'pending' | 'failed';
     orderId: string;
     receiptNumber?: string;
     transaction?: PaymentTransaction;
+    message?: string;
   }> {
     const params = new URLSearchParams();
     if (orderId) params.append('orderId', orderId);
     if (sessionId) params.append('sessionId', sessionId);
+    if (confirm) params.append('confirm', 'true');
     const res = await fetch(`${BASE_URL}/saspay/status?${params.toString()}`);
+    return handleResponse(res);
+  },
+
+  async createSasPaySubscriptionSession(payload: {
+    planId: string;
+    planName?: string;
+    price?: number;
+    userId?: string;
+    userName?: string;
+    userEmail?: string;
+    userPhone?: string;
+    operator?: string;
+    returnUrl?: string;
+  }): Promise<{
+    success: boolean;
+    checkout_url: string;
+    sessionId: string;
+    orderId: string;
+    upstreamId?: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/saspay/create-subscription-session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse(res);
+  },
+
+  async testSasPayConnection(): Promise<{
+    success: boolean;
+    connected: boolean;
+    gateway: string;
+    baseUrl: string;
+    documentation: string;
+    apiKeyMasked: string;
+    latencyMs: number;
+    merchantId?: string;
+    message?: string;
+    error?: string;
+  }> {
+    const res = await fetch(`${BASE_URL}/saspay/test-connection`);
+    return handleResponse(res);
+  },
+
+  async getSubscriptionInvoices(userId?: string): Promise<any[]> {
+    const params = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    const res = await fetch(`${BASE_URL}/subscriptions/invoices${params}`);
     return handleResponse(res);
   },
 

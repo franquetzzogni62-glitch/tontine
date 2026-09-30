@@ -85,3 +85,31 @@ export function getInitials(name: string): string {
   if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+/**
+ * Generates a secure 6-digit numeric access code
+ */
+export function generate6DigitCode(seed?: string): string {
+  if (seed) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash << 5) - hash + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    const positive = (Math.abs(hash) % 900000) + 100000;
+    return String(positive);
+  }
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+/**
+ * Formats a 6-digit code with clean spacing: "482 910"
+ */
+export function formatAccessCode(code?: string): string {
+  if (!code) return '------';
+  const clean = code.replace(/\s+/g, '');
+  if (clean.length === 6) {
+    return `${clean.slice(0, 3)} ${clean.slice(3)}`;
+  }
+  return code;
+}

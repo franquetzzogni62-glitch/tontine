@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/Card'
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
-import { formatFCFA, formatDate } from '../utils/formatters';
+import { formatFCFA, formatDate, generate6DigitCode, formatAccessCode } from '../utils/formatters';
 import {
   Users2,
   Calendar,
@@ -17,12 +17,21 @@ import {
   Phone,
   User as UserIcon,
   Sparkles,
+  KeyRound,
 } from 'lucide-react';
 
 export const JoinGroupPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
-  const { groups, currentUser, setCurrentUser, addMember, updateGroup, addToast } = useApp();
+  const {
+    groups,
+    currentUser,
+    setCurrentUser,
+    addMember,
+    updateGroup,
+    addToast,
+    setCurrentMemberGroupId,
+  } = useApp();
 
   const group = groups.find((g) => g.id === groupId) || groups[0];
 
@@ -85,12 +94,14 @@ export const JoinGroupPage: React.FC = () => {
       // Add to group's members & beneficiarySchedule if not already there
       const currentMembers = group.members || [];
       const newOrder = currentMembers.length + 1;
+      const memberCode = generate6DigitCode(`${newMember.id || newUserId}_${group.id}`);
 
       const updatedMembers = [
         ...currentMembers,
         {
           memberId: newMember.id || newUserId,
           turnOrder: newOrder,
+          accessCode: memberCode,
           hasPaidToday: false,
           totalContributedInGroup: 0,
           presenceValidated: true,
@@ -105,6 +116,7 @@ export const JoinGroupPage: React.FC = () => {
           memberId: newMember.id || newUserId,
           memberName: fullName.trim(),
           memberPhone: phone.trim(),
+          accessCode: memberCode,
           scheduledDate: new Date(Date.now() + newOrder * 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           potAmount: (group.contributionAmount - group.moderatorCommission) * updatedMembers.length,
           status: 'upcoming' as const,
@@ -117,9 +129,11 @@ export const JoinGroupPage: React.FC = () => {
         beneficiarySchedule: updatedSchedule,
       });
 
+      setCurrentMemberGroupId(group.id);
+
       addToast(
         'Félicitations ! 🎉',
-        `Vous avez rejoint la tontine "${group.name}". Votre tour est le N°${newOrder}.`,
+        `Vous avez rejoint la tontine "${group.name}". Votre code secret à 6 chiffres est : ${formatAccessCode(memberCode)}. Conservez-le pour vous reconnecter !`,
         'success'
       );
 

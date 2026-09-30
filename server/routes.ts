@@ -2,7 +2,10 @@ import { Router, Request, Response } from 'express';
 import { db } from './db.js';
 import {
   handleCreateSasPaySession,
+  handleCreateSubscriptionSession,
   handleGetSasPayStatus,
+  handleTestSasPayConnection,
+  handleVerifySubscription,
   handleSasPayWebhook,
 } from './saspay.js';
 
@@ -468,14 +471,36 @@ apiRouter.get('/stats/overview', (req: Request, res: Response) => {
 });
 
 // ==========================================
-// --- SASAPAY GATEWAY ROUTES ---
+// --- SASPAY GATEWAY & SUBSCRIPTIONS ---
 // ==========================================
 
 // Endpoint POST /api/saspay/create-session
 apiRouter.post('/saspay/create-session', handleCreateSasPaySession);
 
+// Endpoint POST /api/saspay/create-subscription-session (Dédié aux abonnements)
+apiRouter.post('/saspay/create-subscription-session', handleCreateSubscriptionSession);
+
 // Endpoint GET /api/saspay/status
 apiRouter.get('/saspay/status', handleGetSasPayStatus);
+
+// Endpoint GET /api/saspay/test-connection (Vérifie la liaison en direct avec l'API SasPay)
+apiRouter.get('/saspay/test-connection', handleTestSasPayConnection);
+
+// Endpoint POST /api/saspay/verify-subscription
+apiRouter.post('/api/saspay/verify-subscription', handleVerifySubscription);
+apiRouter.post('/saspay/verify-subscription', handleVerifySubscription);
+
+// Subscriptions & Invoices API
+apiRouter.get('/subscriptions/invoices', (req: Request, res: Response) => {
+  const userId = req.query.userId as string;
+  res.json(db.getSubscriptionInvoices(userId));
+});
+
+apiRouter.post('/subscriptions/update', (req: Request, res: Response) => {
+  const { userId = 'user_admin_1', planId = 'pro', paymentMethod = 'SasPay Mobile Money' } = req.body;
+  const updatedUser = db.updateSubscription(userId, planId, paymentMethod);
+  res.json({ success: true, user: updatedUser });
+});
 
 // Webhook endpoints
 apiRouter.post('/saspay/webhook', handleSasPayWebhook);

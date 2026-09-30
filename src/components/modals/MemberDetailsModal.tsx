@@ -4,8 +4,8 @@ import { Member } from '../../types';
 import { Avatar } from '../ui/Avatar';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
-import { formatFCFA, formatDate } from '../../utils/formatters';
-import { Phone, Mail, MapPin, Calendar, Award, MessageSquare, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { formatFCFA, formatDate, formatAccessCode, generate6DigitCode } from '../../utils/formatters';
+import { Phone, Mail, MapPin, Calendar, Award, MessageSquare, ShieldCheck, AlertTriangle, KeyRound, Copy, Share2 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 
 interface MemberDetailsModalProps {
@@ -19,7 +19,7 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { addToast } = useApp();
+  const { groups, addToast } = useApp();
 
   if (!member) return null;
 
@@ -137,6 +137,109 @@ export const MemberDetailsModal: React.FC<MemberDetailsModalProps> = ({
               {member.email}
             </span>
           </div>
+        </div>
+
+        {/* Tontines & Codes 6 chiffres */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <KeyRound size={14} className="text-emerald-500" />
+              Codes secrets d'accès aux tontines (Connexion membre)
+            </span>
+          </div>
+
+          {(() => {
+            const cleanP = member.phone.replace(/\D/g, '');
+            const memberGroups = groups.filter((g) =>
+              g.members.some(
+                (m) =>
+                  m.memberId === member.id ||
+                  (m.accessCode && g.beneficiarySchedule.some((b) => (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanP.slice(-8))))
+              ) ||
+              g.beneficiarySchedule.some(
+                (b) =>
+                  b.memberId === member.id ||
+                  (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanP.slice(-8))
+              )
+            );
+
+            if (memberGroups.length === 0) {
+              return (
+                <div className="p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-400 text-center">
+                  Ce membre n'est actuellement inscrit à aucune tontine active.
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-2">
+                {memberGroups.map((g) => {
+                  const gm = g.members.find(
+                    (m) =>
+                      m.memberId === member.id ||
+                      g.beneficiarySchedule.some((b) => b.memberId === m.memberId && (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanP.slice(-8)))
+                  );
+                  const sched = g.beneficiarySchedule.find(
+                    (b) =>
+                      b.memberId === member.id ||
+                      (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanP.slice(-8))
+                  );
+                  const code =
+                    gm?.accessCode ||
+                    sched?.accessCode ||
+                    generate6DigitCode(member.id + g.id);
+
+                  return (
+                    <div
+                      key={g.id}
+                      className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 flex items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0">
+                        <span className="font-bold text-xs text-slate-900 dark:text-white block truncate">
+                          {g.name}
+                        </span>
+                        <span className="text-[11px] text-slate-400 font-mono">
+                          Cotisation : {formatFCFA(g.contributionAmount)}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <span className="font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-1 rounded-md border border-emerald-500/20">
+                          {formatAccessCode(code)}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard?.writeText(code);
+                            addToast('Code copié !', `Code de ${member.name} (${code}) copié.`, 'success');
+                          }}
+                          className="p-1 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 rounded transition-colors cursor-pointer"
+                          title="Copier le code"
+                        >
+                          <Copy size={13} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const text = encodeURIComponent(
+                              `Bonjour ${member.name},\nVoici votre code secret d'accès à 6 chiffres pour la tontine « ${g.name} » : ${code}.\nConnectez-vous sur ${window.location.origin}/login avec votre numéro (${member.phone}) et ce code.`
+                            );
+                            window.open(`https://wa.me/?text=${text}`, '_blank');
+                          }}
+                          className="p-1 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded transition-colors cursor-pointer"
+                          title="Envoyer le code par WhatsApp"
+                        >
+                          <Share2 size={13} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </div>
 
         {member.notes && (

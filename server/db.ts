@@ -30,6 +30,7 @@ export interface DatabaseSchema {
   payments: PaymentTransaction[];
   payouts: PayoutTransaction[];
   notifications: AppNotification[];
+  subscriptionInvoices?: any[];
 }
 
 const DB_FILE_PATH = path.resolve(process.cwd(), 'server', 'data.json');
@@ -148,6 +149,91 @@ class DatabaseService {
       this.data.members[memberIdx].trustScore = Math.max(0, Math.min(100, trustScore));
       this.persist();
     }
+    return user;
+  }
+
+  // --- Subscriptions & Invoices ---
+  getSubscriptionInvoices(userId?: string): any[] {
+    if (!this.data.subscriptionInvoices) {
+      this.data.subscriptionInvoices = [];
+    }
+    if (userId) {
+      return this.data.subscriptionInvoices.filter((inv) => inv.userId === userId);
+    }
+    return this.data.subscriptionInvoices;
+  }
+
+  createSubscriptionInvoice(invoice: any): any {
+    if (!this.data.subscriptionInvoices) {
+      this.data.subscriptionInvoices = [];
+    }
+    this.data.subscriptionInvoices.unshift(invoice);
+    this.persist();
+    return invoice;
+  }
+
+  updateSubscription(
+    userId: string,
+    planId: 'starter' | 'pro' | 'enterprise',
+    paymentMethod = 'SasPay Mobile Money'
+  ): User | null {
+    const prices: Record<string, number> = {
+      starter: 5000,
+      pro: 15000,
+      enterprise: 30000,
+    };
+    const names: Record<string, string> = {
+      starter: 'Formule Starter',
+      pro: 'Formule Pro',
+      enterprise: 'Formule Entreprise',
+    };
+
+    let user = this.getUserById(userId);
+    if (!user) {
+      // Fallback to first moderator user if not found
+      user = this.data.users.find((u) => u.role === 'moderator') || this.data.users[0];
+    }
+    if (!user) return null;
+
+    const newSub = {
+      planId,
+      planName: names[planId] || 'Formule Pro',
+      pricePerMonth: prices[planId] || 15000,
+      status: 'active' as const,
+      startedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      paymentMethod,
+      autoRenew: true,
+      maxGroups: planId === 'starter' ? 3 : 999,
+    };
+
+    user.subscription = newSub;
+    this.persist();
+
+    // Generate invoice record
+    const invoice = {
+      id: `inv_${Date.now()}`,
+      orderId: `TF-SUB-${Date.now()}`,
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      planId,
+      planName: names[planId] || 'Formule Pro',
+      amount: prices[planId] || 15000,
+      currency: 'XAF',
+      date: new Date().toISOString(),
+      status: 'paid',
+      paymentMethod,
+      receiptNumber: `REC-SUB-${Date.now().toString(36).toUpperCase()}`,
+    };
+    this.createSubscriptionInvoice(invoice);
+
+    this.createNotification({
+      title: '🌟 Abonnement SaaS Modérateur activé',
+      message: `Votre abonnement ${names[planId]} a été validé avec succès via ${paymentMethod} pour 30 jours supplémentaires.`,
+      type: 'payment',
+    });
+
     return user;
   }
 
