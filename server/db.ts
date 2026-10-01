@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import {
   User,
   Member,
@@ -13,15 +14,8 @@ import {
   BeneficiaryTurn,
   KycStatus,
   UserRole,
+  TontineGroupMember,
 } from '../src/types/index.js';
-import {
-  CURRENT_MODERATOR,
-  CURRENT_MEMBER,
-  MOCK_MEMBERS,
-  MOCK_GROUPS,
-  generateMockTransactions,
-  MOCK_NOTIFICATIONS,
-} from '../src/mocks/data.js';
 
 export interface DatabaseSchema {
   users: User[];
@@ -82,14 +76,15 @@ class DatabaseService {
       console.warn('Failed reading existing database file, re-seeding:', err);
     }
 
-    // Production clean initial data
+    // Production clean initial data (empty database)
     const initialData: DatabaseSchema = {
-      users: [CURRENT_MODERATOR, CURRENT_MEMBER],
+      users: [],
       groups: [],
       members: [],
       payments: [],
       payouts: [],
       notifications: [],
+      subscriptionInvoices: [],
     };
 
     this.persist(initialData);
@@ -115,6 +110,49 @@ class DatabaseService {
 
   getUserById(id: string): User | undefined {
     return this.data.users.find((u) => u.id === id);
+  }
+
+  getUserByEmail(email: string): User | undefined {
+    const clean = (email || '').trim().toLowerCase();
+    return this.data.users.find((u) => (u.email || '').trim().toLowerCase() === clean);
+  }
+
+  hashPassword(password: string, salt = crypto.randomBytes(16).toString('hex')): { hash: string; salt: string } {
+    const hash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return { hash, salt };
+  }
+
+  verifyPassword(password: string, hash: string, salt: string): boolean {
+    const checkHash = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
+    return checkHash === hash;
+  }
+
+  findMemberByPhoneAndCode(
+    phone: string,
+    accessCode: string
+  ): { member: Member; group: TontineGroup; groupMember: TontineGroupMember } | null {
+    const cleanPhone = (phone || '').replace(/[\s\-\(\)\+]/g, '');
+    const cleanCode = (accessCode || '').replace(/\D/g, '');
+
+    if (!cleanPhone || !cleanCode) return null;
+
+    for (const group of this.data.groups) {
+      for (const gm of group.members) {
+        const storedCode = (gm.accessCode || '').replace(/\D/g, '');
+        if (storedCode === cleanCode) {
+          const member = this.getMemberById(gm.memberId);
+          const mPhone = (member?.phone || '').replace(/[\s\-\(\)\+]/g, '');
+          if (
+            mPhone &&
+            cleanPhone &&
+            (mPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(mPhone.slice(-8)))
+          ) {
+            return { member: member!, group, groupMember: gm };
+          }
+        }
+      }
+    }
+    return null;
   }
 
   createUser(user: User): User {
@@ -856,7 +894,10 @@ class DatabaseService {
       currentDay: isFinished ? group.totalMembersCount : nextDay,
       status: isFinished ? 'completed' : group.status,
       beneficiarySchedule: updatedSchedule,
-      members: group.members.map((m) => ({ ...m, hasPaidToday: false })),
+      members: group.members.map((m) => ({
+        ...m,
+        hasPaidToday: Boolean(m.paidUntilRound && m.paidUntilRound >= nextDay),
+      })),
     };
 
     const recipient = updatedSchedule.find((b) => b.order === nextDay);
@@ -944,12 +985,17 @@ class DatabaseService {
     // Update group member status
     const group = this.getGroupById(newPayment.groupId);
     if (group) {
+      const turns = newPayment.turnsCovered || 1;
+      const endTurn = Math.min(group.totalMembersCount, group.currentDay + turns - 1);
+
       const updatedMembers = group.members.map((m) => {
         if (m.memberId === newPayment.memberId) {
           return {
             ...m,
             hasPaidToday: true,
-            totalContributedInGroup: m.totalContributedInGroup + newPayment.amount,
+            paidUntilRound: endTurn,
+            paidToursAdvance: (m.paidToursAdvance || 0) + (turns > 1 ? turns - 1 : 0),
+            totalContributedInGroup: (m.totalContributedInGroup || 0) + newPayment.amount,
           };
         }
         return m;
@@ -961,7 +1007,7 @@ class DatabaseService {
     const member = this.getMemberById(newPayment.memberId);
     if (member) {
       this.updateMember(member.id, {
-        totalContributed: member.totalContributed + newPayment.amount,
+        totalContributed: (member.totalContributed || 0) + newPayment.amount,
         trustScore: Math.min(100, (member.trustScore || 90) + 1),
       });
     }
@@ -969,12 +1015,66 @@ class DatabaseService {
     // Add notification
     this.createNotification({
       title: 'Cotisation enregistrée',
-      message: `${newPayment.memberName} a versé ${newPayment.amount.toLocaleString()} FCFA pour ${newPayment.groupName}.`,
+      message: `${newPayment.memberName} a versé ${newPayment.amount.toLocaleString()} FCFA pour ${newPayment.groupName}${newPayment.coveredRounds ? ` (${newPayment.coveredRounds})` : ''}.`,
       type: 'payment',
     });
 
     this.persist();
     return newPayment;
+  }
+
+  recordTurnPayment(payload: {
+    groupId: string;
+    memberId: string;
+    turnsCount?: number;
+    operator?: string;
+    phoneNumber?: string;
+    notes?: string;
+  }): { payment: PaymentTransaction; group: TontineGroup } {
+    const group = this.getGroupById(payload.groupId);
+    if (!group) throw new Error('Tontine introuvable.');
+
+    const member = this.getMemberById(payload.memberId);
+    if (!member) throw new Error('Membre introuvable.');
+
+    const gmIndex = group.members.findIndex((m) => m.memberId === payload.memberId);
+    if (gmIndex === -1) throw new Error('Le membre ne fait pas partie de cette tontine.');
+
+    const turnsCount = Math.max(1, Number(payload.turnsCount) || 1);
+    const totalAmount = group.contributionAmount * turnsCount;
+    const moderatorCommission = (group.moderatorCommission || 0) * turnsCount;
+    const baseAmount = totalAmount - moderatorCommission;
+
+    const startTurn = group.currentDay;
+    const endTurn = Math.min(group.totalMembersCount, group.currentDay + turnsCount - 1);
+    const coveredRounds = turnsCount > 1 ? `Tours #${startTurn} à #${endTurn}` : `Tour #${startTurn}`;
+
+    const txId = `tx_${Date.now()}_${Math.floor(100 + Math.random() * 900)}`;
+    const tx: PaymentTransaction = {
+      id: txId,
+      groupId: group.id,
+      groupName: group.name,
+      memberId: member.id,
+      memberName: member.name,
+      memberPhone: payload.phoneNumber || member.phone,
+      amount: totalAmount,
+      baseAmount,
+      commission: moderatorCommission,
+      date: new Date().toISOString(),
+      status: 'paid',
+      method: payload.operator || 'Mobile Money',
+      transactionRef: `TRX-${Date.now().toString().slice(-6)}`,
+      receiptNumber: `REC-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
+      verifiedByModerator: true,
+      turnsCovered: turnsCount,
+      coveredRounds,
+      notes: payload.notes || `Règlement de ${turnsCount} tour(s) (${coveredRounds})`,
+    };
+
+    this.createPayment(tx);
+
+    const updatedGroup = this.getGroupById(group.id)!;
+    return { payment: tx, group: updatedGroup };
   }
 
   verifyPayment(id: string): PaymentTransaction | null {
@@ -1142,35 +1242,50 @@ class DatabaseService {
     this.persist();
   }
 
-  // --- Stats ---
-  getStatsOverview() {
-    const activeGroups = this.data.groups.filter((g) => g.status === 'active');
-    const totalMembers = this.data.members.length;
+  // --- Stats (Multi-tenant isolated) ---
+  getStatsOverview(moderatorId?: string) {
+    const relevantGroups = moderatorId
+      ? this.data.groups.filter((g) => g.moderatorId === moderatorId)
+      : this.data.groups;
 
-    const totalCollected = this.data.payments.reduce(
+    const groupIds = new Set(relevantGroups.map((g) => g.id));
+    const activeGroups = relevantGroups.filter((g) => g.status === 'active');
+
+    // Distinct members enrolled in moderator's groups
+    const enrolledMemberIds = new Set<string>();
+    for (const g of relevantGroups) {
+      for (const m of g.members || []) {
+        enrolledMemberIds.add(m.memberId);
+      }
+    }
+    const totalMembers = enrolledMemberIds.size;
+
+    const relevantPayments = this.data.payments.filter((p) => groupIds.has(p.groupId));
+
+    const totalCollected = relevantPayments.reduce(
       (acc, p) => (p.status === 'paid' ? acc + p.amount : acc),
       0
     );
 
-    const totalCommissions = this.data.payments.reduce(
+    const totalCommissions = relevantPayments.reduce(
       (acc, p) => (p.status === 'paid' ? acc + p.commission : acc),
       0
     );
 
-    const paidCount = this.data.payments.filter((p) => p.status === 'paid').length;
+    const paidCount = relevantPayments.filter((p) => p.status === 'paid').length;
     const recoveryRate =
-      this.data.payments.length > 0
-        ? Math.round((paidCount / this.data.payments.length) * 100)
+      relevantPayments.length > 0
+        ? Math.round((paidCount / relevantPayments.length) * 100)
         : 100;
 
     return {
       activeGroupsCount: activeGroups.length,
-      totalGroupsCount: this.data.groups.length,
+      totalGroupsCount: relevantGroups.length,
       totalMembersCount: totalMembers,
       totalCollected,
       totalCommissions,
       recoveryRate,
-      paymentsCount: this.data.payments.length,
+      paymentsCount: relevantPayments.length,
     };
   }
 }

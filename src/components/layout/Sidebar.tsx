@@ -9,9 +9,7 @@ import {
   BarChart3,
   Settings,
   Sparkles,
-  ArrowRightLeft,
   X,
-  ExternalLink,
   Plus,
   LogOut,
 } from 'lucide-react';
@@ -24,7 +22,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
-  const { currentUser, switchRole, logout, groups } = useApp();
+  const { currentUser, logout, groups } = useApp();
   const navigate = useNavigate();
 
   const navLinks = [
@@ -36,11 +34,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
       to: '/dashboard/subscription',
       label: 'Mon Abonnement',
       icon: <Sparkles size={19} />,
-      badge: currentUser.subscription?.planName ? 'Pro' : undefined,
+      badge: currentUser?.subscription?.planName ? 'Actif' : undefined,
     },
     { to: '/dashboard/reports', label: 'Rapports & Stats', icon: <BarChart3 size={19} /> },
     { to: '/dashboard/settings', label: 'Paramètres', icon: <Settings size={19} /> },
   ];
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
 
   return (
     <>
@@ -60,95 +63,75 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
         }`}
       >
         {/* Brand header */}
-        <div className="h-16 px-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <Link to="/dashboard" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-base shadow-xs">
+        <div className="h-16 px-5 border-b border-slate-200/80 dark:border-slate-800 flex items-center justify-between">
+          <Link to="/dashboard" className="flex items-center gap-2 group">
+            <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-base shadow-sm shadow-emerald-600/30">
               TF
             </div>
-            <div>
-              <span className="text-sm font-bold tracking-tight text-slate-900 dark:text-white leading-tight block truncate max-w-[140px]">
-                {currentUser.organizationName || 'TontiFlow SaaS'}
-              </span>
-              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold tracking-wide">
-                Modérateur · {currentUser.subscription?.planName || 'Forfait Pro'}
-              </span>
-            </div>
+            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+              Tonti<span className="text-emerald-500">Flow</span>
+            </span>
           </Link>
 
           <button
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 lg:hidden cursor-pointer"
-            aria-label="Fermer la navigation"
+            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-lg lg:hidden"
+            aria-label="Fermer le menu"
           >
             <X size={20} />
           </button>
         </div>
 
-        {/* Action Button */}
+        {/* Action Button: Create New Group */}
         <div className="p-4 pb-2">
-          <Link to="/dashboard/groups/new" onClick={() => onClose()}>
+          <Link to="/dashboard/groups/new" onClick={onClose}>
             <Button
               variant="emerald"
-              size="sm"
-              className="w-full justify-center shadow-xs"
-              leftIcon={<Plus size={16} />}
+              size="md"
+              className="w-full shadow-sm shadow-emerald-600/20"
+              leftIcon={<Plus size={17} />}
             >
-              Nouveau groupe
+              Créer une tontine
             </Button>
           </Link>
         </div>
 
-        {/* Navigation list */}
-        <div className="flex-1 px-3 py-2 space-y-1 overflow-y-auto">
-          <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 tracking-wider">
-            GESTION
+        {/* Navigation links */}
+        <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
+          <div className="px-3 pb-1 text-[11px] font-semibold text-slate-400 tracking-wider">
+            GESTION & PILOTAGE
           </div>
-          {navLinks.map((link) => (
+          {navLinks.map((item) => (
             <NavLink
-              key={link.to}
-              to={link.to}
-              end={link.end}
-              onClick={() => onClose()}
+              key={item.to}
+              to={item.to}
+              end={item.end}
+              onClick={onClose}
               className={({ isActive }) =>
-                `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium transition-all group select-none ${
+                `flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                   isActive
-                    ? 'bg-slate-900 text-white dark:bg-emerald-500/15 dark:text-emerald-400 font-semibold'
-                    : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70 hover:text-slate-900 dark:hover:text-white'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/70 dark:hover:bg-slate-800/60'
                 }`
               }
             >
               <div className="flex items-center gap-3">
-                <span className="shrink-0">{link.icon}</span>
-                <span>{link.label}</span>
+                <span className="shrink-0">{item.icon}</span>
+                <span>{item.label}</span>
               </div>
-              {link.badge !== undefined && (
-                <span className="font-mono text-[11px] px-2 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                  {link.badge}
+              {item.badge !== undefined && (
+                <span
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-full font-bold ${
+                    item.badge === 'Actif'
+                      ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  {item.badge}
                 </span>
               )}
             </NavLink>
           ))}
-
-          {/* Quick link to Member view */}
-          <div className="pt-4 mt-4 border-t border-slate-100 dark:border-slate-800/80">
-            <div className="px-3 py-1 text-[11px] font-semibold text-slate-400 tracking-wider">
-              VUE APPRENANT / PARTICIPANT
-            </div>
-            <Link
-              to="/member"
-              onClick={() => {
-                switchRole('member');
-                onClose();
-              }}
-              className="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <Sparkles size={16} />
-                <span>Portail Membre</span>
-              </div>
-              <ExternalLink size={13} />
-            </Link>
-          </div>
         </div>
 
         {/* User Card at bottom */}
@@ -156,49 +139,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
           <div className="flex items-center justify-between p-2 rounded-xl bg-white dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/60">
             <div className="flex items-center gap-2.5 min-w-0">
               <Avatar
-                name={currentUser.name}
-                src={currentUser.avatarUrl}
+                name={currentUser?.name || 'Modérateur'}
+                src={currentUser?.avatarUrl}
                 size="sm"
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-slate-900 dark:text-white truncate">
-                  {currentUser.name}
+                  {currentUser?.name || 'Modérateur'}
                 </p>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-                  {currentUser.role === 'moderator' ? 'Modérateur' : 'Membre'} · {currentUser.city}
+                  {currentUser?.organizationName || 'Espace Modérateur'}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1 shrink-0">
-              <button
-                onClick={() => switchRole(currentUser.role === 'moderator' ? 'member' : 'moderator')}
-                className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors cursor-pointer"
-                title="Basculer vers la vue Membre"
-              >
-                <ArrowRightLeft size={15} />
-              </button>
-              <button
-                onClick={() => {
-                  logout();
-                  navigate('/login');
-                }}
-                className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer"
-                title="Déconnexion"
-              >
-                <LogOut size={15} />
-              </button>
-            </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Déconnexion"
+            >
+              <LogOut size={16} />
+            </button>
           </div>
 
           <button
-            onClick={() => {
-              logout();
-              navigate('/login');
-            }}
+            onClick={handleLogout}
             className="w-full flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-600 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-rose-50/60 dark:hover:bg-rose-950/20 transition-colors cursor-pointer border border-transparent hover:border-rose-200 dark:hover:border-rose-900/40"
           >
-            <LogOut size={13} />
+            <LogOut size={14} />
             <span>Se déconnecter</span>
           </button>
         </div>

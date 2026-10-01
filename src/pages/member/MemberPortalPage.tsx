@@ -46,7 +46,6 @@ import {
 export const MemberPortalPage: React.FC = () => {
   const {
     currentUser,
-    switchRole,
     logout,
     groups,
     members,
@@ -81,19 +80,19 @@ export const MemberPortalPage: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const cleanPhone = (currentUser.phone || '').replace(/[\s\-\(\)\+]/g, '');
+  const cleanPhone = (currentUser?.phone || '').replace(/[\s\-\(\)\+]/g, '');
 
-  // Find all groups where this user is participating (by id or by phone)
+  // Strict member isolation: Only groups where this user is enrolled
   const myGroups = groups.filter((g) => {
-    const inMembers = g.members.some((m) => {
-      if (m.memberId === currentUser.id) return true;
+    const inMembers = (g.members || []).some((m) => {
+      if (m.memberId === currentUser?.id) return true;
       const memObj = members.find((mb) => mb.id === m.memberId);
       const mPhone = (memObj?.phone || '').replace(/[\s\-\(\)\+]/g, '');
       return cleanPhone && (mPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(mPhone.slice(-8)));
     });
 
-    const inSched = g.beneficiarySchedule.some((b) => {
-      if (b.memberId === currentUser.id) return true;
+    const inSched = (g.beneficiarySchedule || []).some((b) => {
+      if (b.memberId === currentUser?.id) return true;
       const bPhone = (b.memberPhone || '').replace(/[\s\-\(\)\+]/g, '');
       return cleanPhone && (bPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(bPhone.slice(-8)));
     });
@@ -101,21 +100,22 @@ export const MemberPortalPage: React.FC = () => {
     return inMembers || inSched;
   });
 
-  const displayGroups = myGroups.length > 0 ? myGroups : groups.slice(0, 2);
+  const displayGroups = myGroups;
 
-  // Active group selected (from context or first available)
+  // Active group selected (from session or first enrolled)
   const activeGroup =
     displayGroups.find((g) => g.id === currentMemberGroupId) ||
     displayGroups[0] ||
-    groups[0];
+    null;
 
-  const getMemberAccessCodeForGroup = (grp: TontineGroup) => {
+  const getMemberAccessCodeForGroup = (grp: TontineGroup | null) => {
+    if (!grp || !currentUser) return '';
     const gm = grp.members.find(
       (m) =>
         m.memberId === currentUser.id ||
         members.find((mb) => mb.id === m.memberId)?.phone.replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
     );
-    const sched = grp.beneficiarySchedule.find(
+    const sched = (grp.beneficiarySchedule || []).find(
       (b) =>
         b.memberId === currentUser.id ||
         (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
@@ -127,17 +127,17 @@ export const MemberPortalPage: React.FC = () => {
 
   // Check if it's "MY TURN" in the active group or any other
   const myActivePotTurn = displayGroups.find((g) => {
-    const myTurn = g.beneficiarySchedule.find(
+    const myTurn = (g.beneficiarySchedule || []).find(
       (b) =>
-        b.memberId === currentUser.id ||
+        b.memberId === currentUser?.id ||
         (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
     );
     return myTurn && myTurn.order === g.currentDay && myTurn.status !== 'completed';
   });
 
-  const myTurnInfo = activeGroup.beneficiarySchedule.find(
+  const myTurnInfo = activeGroup?.beneficiarySchedule?.find(
     (b) =>
-      b.memberId === currentUser.id ||
+      b.memberId === currentUser?.id ||
       (b.memberPhone || '').replace(/\D/g, '').endsWith(cleanPhone.slice(-8))
   ) || activeGroup.beneficiarySchedule[0];
 
@@ -284,38 +284,40 @@ export const MemberPortalPage: React.FC = () => {
         )}
 
         {/* Active Tontine Context Info Banner */}
-        <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-              <Building size={18} />
+        {activeGroup && (
+          <div className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <Building size={18} />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  {activeGroup.name}
+                </h2>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
+                  Tour #{activeGroup.currentDay} en cours · Cycle #{activeGroup.currentCycle}
+                </span>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h2 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                {activeGroup.name}
-              </h2>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate">
-                Tour #{activeGroup.currentDay} en cours · Cycle #{activeGroup.currentCycle}
-              </span>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
-              <KeyRound size={12} className="text-emerald-500" />
-              {formatAccessCode(activeGroupAccessCode)}
-            </span>
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText(activeGroupAccessCode);
-                addToast('Code copié !', 'Votre code d\'accès à 6 chiffres a été copié.', 'success');
-              }}
-              className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-              title="Copier mon code"
-            >
-              <Copy size={13} />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="font-mono text-xs font-bold px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                <KeyRound size={12} className="text-emerald-500" />
+                {formatAccessCode(activeGroupAccessCode)}
+              </span>
+              <button
+                onClick={() => {
+                  navigator.clipboard?.writeText(activeGroupAccessCode);
+                  addToast('Code copié !', 'Votre code d\'accès à 6 chiffres a été copié.', 'success');
+                }}
+                className="p-1.5 text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                title="Copier mon code"
+              >
+                <Copy size={13} />
+              </button>
+            </div>
           </div>
-        </div>
+        )}
         {/* ========================================================================= */}
         {/* SPECIAL HIGHLIGHT BANNER: C'EST MON TOUR DE RECEVOIR LE POT ! */}
         {/* ========================================================================= */}
@@ -466,8 +468,8 @@ export const MemberPortalPage: React.FC = () => {
             </div>
           ) : (
             displayGroups.map((group) => {
-              const memberRecord = group.members.find(
-                (m) => m.memberId === currentUser.id || m.memberId === 'mem_2'
+              const memberRecord = (group.members || []).find(
+                (m) => m.memberId === currentUser?.id
               );
               const hasPaid = memberRecord?.hasPaidToday ?? false;
               const isMemberDepleted = memberRecord?.status === 'GUARANTEE_DEPLETED' || isGuaranteeDepleted;

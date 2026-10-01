@@ -1,18 +1,17 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
-import { Moon, Sun, Menu, X, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Moon, Sun, Menu, X, ArrowRight, LayoutDashboard, UserCheck } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 export const Navbar: React.FC = () => {
-  const { theme, toggleTheme, currentUser, switchRole } = useApp();
+  const { theme, toggleTheme, currentUser } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const navigate = useNavigate();
 
   return (
     <header className="sticky top-0 z-40 w-full bg-white/90 dark:bg-slate-950/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        {/* Zone 1: Single text element wordmark */}
+        {/* Wordmark logo */}
         <Link to="/" className="flex items-center gap-2 group">
           <div className="w-8 h-8 rounded-xl bg-emerald-600 flex items-center justify-center text-white font-bold text-base shadow-sm shadow-emerald-600/30 group-hover:scale-105 transition-transform">
             TF
@@ -22,7 +21,7 @@ export const Navbar: React.FC = () => {
           </span>
         </Link>
 
-        {/* Zone 2: Clean text navigation links */}
+        {/* Clean text navigation links */}
         <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600 dark:text-slate-300">
           <a href="#comment-ca-marche" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
             Comment ça marche
@@ -33,12 +32,12 @@ export const Navbar: React.FC = () => {
           <a href="#temoignages" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
             Témoignages
           </a>
-          <Link to="/member" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
-            Portail Membre
+          <Link to="/login" className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors">
+            Espace Membres
           </Link>
         </nav>
 
-        {/* Zone 3: Actions */}
+        {/* Actions */}
         <div className="hidden md:flex items-center gap-3">
           <button
             onClick={toggleTheme}
@@ -48,17 +47,31 @@ export const Navbar: React.FC = () => {
             {theme === 'dark' ? <Sun size={19} /> : <Moon size={19} />}
           </button>
 
-          <Link to="/login">
-            <Button variant="ghost" size="sm">
-              Connexion
-            </Button>
-          </Link>
+          {currentUser ? (
+            <Link to={currentUser.role === 'member' ? '/member' : '/dashboard'}>
+              <Button
+                variant="emerald"
+                size="sm"
+                leftIcon={currentUser.role === 'member' ? <UserCheck size={16} /> : <LayoutDashboard size={16} />}
+              >
+                {currentUser.role === 'member' ? 'Mon Espace Membre' : 'Mon Tableau de bord'}
+              </Button>
+            </Link>
+          ) : (
+            <>
+              <Link to="/login">
+                <Button variant="ghost" size="sm">
+                  Connexion
+                </Button>
+              </Link>
 
-          <Link to="/register">
-            <Button variant="emerald" size="sm" rightIcon={<ArrowRight size={15} />}>
-              Créer un compte
-            </Button>
-          </Link>
+              <Link to="/register">
+                <Button variant="emerald" size="sm" rightIcon={<ArrowRight size={15} />}>
+                  Créer un compte
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         {/* Mobile menu trigger */}
@@ -106,25 +119,38 @@ export const Navbar: React.FC = () => {
               Témoignages
             </a>
             <Link
-              to="/member"
+              to="/login"
               onClick={() => setMobileMenuOpen(false)}
               className="px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800"
             >
-              Portail Membre
+              Espace Membres
             </Link>
           </div>
 
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col gap-2">
-            <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="outline" size="md" className="w-full">
-                Connexion
-              </Button>
-            </Link>
-            <Link to="/register" onClick={() => setMobileMenuOpen(false)}>
-              <Button variant="emerald" size="md" className="w-full">
-                Créer un compte
-              </Button>
-            </Link>
+            {currentUser ? (
+              <Link
+                to={currentUser.role === 'member' ? '/member' : '/dashboard'}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                <Button variant="emerald" size="md" className="w-full">
+                  {currentUser.role === 'member' ? 'Mon Espace Membre' : 'Mon Tableau de bord'}
+                </Button>
+              </Link>
+            ) : (
+              <>
+                <Link to="/login" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="outline" size="md" className="w-full">
+                    Connexion
+                  </Button>
+                </Link>
+                <Link to="/register" onClick={() => setMobileMenuOpen(false)}>
+                  <Button variant="emerald" size="md" className="w-full">
+                    Créer un compte
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
         </div>
       )}

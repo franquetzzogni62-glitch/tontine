@@ -46,7 +46,6 @@ export const PaymentProcessingPage: React.FC = () => {
   const [transaction, setTransaction] = useState<PaymentTransaction | null>(null);
   const [pollingCount, setPollingCount] = useState<number>(0);
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
-  const [isConfirmingManually, setIsConfirmingManually] = useState(false);
 
   const hasFiredConfetti = useRef(false);
 
@@ -107,37 +106,6 @@ export const PaymentProcessingPage: React.FC = () => {
       if (timerId) clearTimeout(timerId);
     };
   }, [orderId, sessionId, status]);
-
-  // Possibilité de valider immédiatement (mode test / démo / fallback)
-  const handleManualValidation = async () => {
-    setIsConfirmingManually(true);
-    try {
-      const res = await checkSasPayStatus(orderId, sessionId, true);
-      setStatus('completed');
-      if (res.receiptNumber) setReceiptNumber(res.receiptNumber);
-      if (res.transaction) setTransaction(res.transaction);
-
-      if (!hasFiredConfetti.current) {
-        hasFiredConfetti.current = true;
-        try {
-          confetti({
-            particleCount: 100,
-            spread: 70,
-            origin: { y: 0.6 },
-          });
-        } catch {
-          // ignore
-        }
-      }
-
-      await refreshData();
-      addToast('Paiement validé avec succès !', 'Votre cotisation est désormais enregistrée.', 'success');
-    } catch {
-      setStatus('completed');
-    } finally {
-      setIsConfirmingManually(false);
-    }
-  };
 
   const currentTx =
     transaction ||
@@ -219,18 +187,6 @@ export const PaymentProcessingPage: React.FC = () => {
             <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400">
               <RefreshCw size={13} className="animate-spin text-emerald-500" />
               <span>Polling actif (tentative #{pollingCount})...</span>
-            </div>
-
-            {/* Test confirmation fallback helper */}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={handleManualValidation}
-                disabled={isConfirmingManually}
-                className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline font-medium cursor-pointer inline-flex items-center gap-1"
-              >
-                <span>Confirmer immédiatement (Validation de test / démo)</span>
-              </button>
             </div>
           </Card>
         )}

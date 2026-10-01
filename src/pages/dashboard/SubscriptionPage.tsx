@@ -161,7 +161,7 @@ export const SubscriptionPage: React.FC = () => {
       const finalizeReturn = async () => {
         try {
           if (orderIdParam) {
-            await api.getSasPayStatus(orderIdParam, undefined, true);
+            await api.getSasPayStatus(orderIdParam);
           }
           await updateSubscription(planIdParam, 'SasPay Mobile Money');
           addToast(
@@ -257,7 +257,7 @@ export const SubscriptionPage: React.FC = () => {
     if (!activeSession) return;
     setIsProcessing(true);
     try {
-      await api.getSasPayStatus(activeSession.orderId, activeSession.sessionId, true);
+      await api.getSasPayStatus(activeSession.orderId, activeSession.sessionId);
       handlePaymentSuccess();
     } catch (err: any) {
       addToast('Erreur', err.message || 'Impossible de valider.', 'error');

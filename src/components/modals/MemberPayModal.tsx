@@ -40,14 +40,14 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
   group,
 }) => {
   const navigate = useNavigate();
-  const { currentUser, simulateWebhook, addToast } = useApp();
+  const { currentUser, addToast } = useApp();
 
   const [selectedCountryCode, setSelectedCountryCode] = useState<string>('CM');
   const selectedCountry = SUPPORTED_COUNTRIES.find((c) => c.code === selectedCountryCode) || SUPPORTED_COUNTRIES[1];
 
   const [operator, setOperator] = useState<string>(selectedCountry.operators[0] || 'Orange Money');
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>('XAF');
-  const [phone, setPhone] = useState(currentUser.phone || `${selectedCountry.dialCode} 6 75 12 34 56`);
+  const [phone, setPhone] = useState(currentUser?.phone || `${selectedCountry.dialCode} `);
 
   const [step, setStep] = useState<'form' | 'gateway_loading' | 'ussd' | 'webhook' | 'success'>('form');
   const [generatedTx, setGeneratedTx] = useState<PaymentTransaction | null>(null);
@@ -82,13 +82,13 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
         amount: convertedAmount,
         currency: selectedCurrency,
         orderId,
-        customerEmail: currentUser.email || 'client@tontiflow.africa',
+        customerEmail: currentUser?.email || 'client@tontiflow.africa',
         customerPhone: phone,
-        customerName: currentUser.name,
+        customerName: currentUser?.name || 'Membre TontiFlow',
         metadata: {
           groupId: group.id,
           groupName: group.name,
-          memberId: currentUser.id,
+          memberId: currentUser?.id,
           operator,
           type: 'contribution',
         },
@@ -110,69 +110,6 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
       setStep('form');
       addToast('Erreur passerelle', WHITE_LABEL_TEXTS.errorMessage, 'error');
     }
-  };
-
-  /**
-   * Alternative : Paiement direct avec prompt USSD
-   */
-  const handleDirectUSSD = async () => {
-    setStep('ussd');
-
-    setTimeout(() => {
-      setStep('webhook');
-    }, 1200);
-
-    setTimeout(async () => {
-      try {
-        const res = await simulateWebhook({
-          groupId: group.id,
-          memberId: currentUser.id,
-          amount: group.contributionAmount,
-          operator: (['MTN MoMo', 'Orange Money', 'Wave'].includes(operator)
-            ? operator
-            : 'Orange Money') as any,
-          phoneNumber: phone,
-          status: 'completed',
-        });
-
-        if (res && res.transaction) {
-          setGeneratedTx(res.transaction);
-        } else {
-          setGeneratedTx({
-            id: `tx_${Date.now()}`,
-            groupId: group.id,
-            groupName: group.name,
-            memberId: currentUser.id,
-            memberName: currentUser.name,
-            memberPhone: phone,
-            amount: group.contributionAmount,
-            baseAmount: group.contributionAmount - group.moderatorCommission,
-            commission: group.moderatorCommission,
-            date: new Date().toISOString(),
-            status: 'paid',
-            method: operator,
-            transactionRef: `TRX-${Math.floor(100000 + Math.random() * 900000)}`,
-            receiptNumber: `REC-${Date.now().toString(36).toUpperCase()}`,
-            verifiedByModerator: true,
-          });
-        }
-
-        setStep('success');
-
-        try {
-          confetti({
-            particleCount: 90,
-            spread: 75,
-            origin: { y: 0.6 },
-            colors: ['#10B981', '#F59E0B', '#0F172A'],
-          });
-        } catch {
-          // ignore
-        }
-      } catch {
-        setStep('success');
-      }
-    }, 2400);
   };
 
   const handleFinish = () => {
@@ -318,16 +255,6 @@ export const MemberPayModal: React.FC<MemberPayModalProps> = ({
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
               <Button type="button" variant="outline" size="sm" onClick={onClose} className="w-full sm:w-auto">
                 Annuler
-              </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                size="md"
-                onClick={handleDirectUSSD}
-                className="w-full sm:w-auto text-xs"
-              >
-                Validation Rapide USSD
               </Button>
 
               <Button

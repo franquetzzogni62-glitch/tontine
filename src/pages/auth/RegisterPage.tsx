@@ -10,12 +10,11 @@ import {
   User as UserIcon,
   Phone,
   ArrowRight,
-  Shield,
   Building,
   CheckCircle2,
   Sparkles,
   Info,
-  BadgePercent,
+  AlertCircle,
 } from 'lucide-react';
 import { SubscriptionPlanId } from '../../types';
 import { formatFCFA } from '../../utils/formatters';
@@ -27,10 +26,11 @@ export const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
   const [organizationName, setOrganizationName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('+237 6 ');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [planId, setPlanId] = useState<SubscriptionPlanId>('pro');
   const [isLoading, setIsLoading] = useState(false);
+  const [registerError, setRegisterError] = useState<string | null>(null);
 
   const plans = [
     {
@@ -59,20 +59,37 @@ export const RegisterPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setRegisterError(null);
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim();
+    const cleanPhone = phone.trim();
+
+    if (!cleanName || !cleanEmail || !password) {
+      setRegisterError('Veuillez remplir tous les champs obligatoires.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setRegisterError('Le mot de passe doit comporter au moins 6 caractères.');
+      return;
+    }
+
     setIsLoading(true);
 
     try {
       await registerModerator({
-        name: name.trim() || 'Nouveau Modérateur',
+        name: cleanName,
         organizationName: organizationName.trim() || 'Réseau Tontines Indépendant',
-        email: email.trim() || `moderator_${Date.now()}@tontiflow.africa`,
-        phone: phone.trim() || '+237 6 00 00 00 00',
+        email: cleanEmail,
+        phone: cleanPhone || '+237 6 00 00 00 00',
+        password,
         planId,
       });
 
-      navigate('/dashboard');
-    } catch {
-      // Handled in context
+      navigate('/dashboard', { replace: true });
+    } catch (err: any) {
+      setRegisterError(err.message || 'Erreur lors de la création de compte.');
     } finally {
       setIsLoading(false);
     }
@@ -100,8 +117,8 @@ export const RegisterPage: React.FC = () => {
             Créez votre compte Modérateur
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Lancez vos propres tontines, inscrivez vos membres et encaissez vos commissions
-            facilement.
+            Lancez vos propres tontines, inscrivez vos membres et encaissez vos cotisations
+            en toute conformité.
           </p>
         </div>
 
@@ -112,7 +129,7 @@ export const RegisterPage: React.FC = () => {
             <span className="font-bold block">Vous êtes membre / cotisant ?</span>
             <span>
               Vous n'avez pas besoin de créer un compte ici ! Votre modérateur vous remet un{' '}
-              <strong>code à 6 chiffres</strong>.{' '}
+              <strong>code secret à 6 chiffres</strong>.{' '}
               <Link to="/login" className="underline font-bold text-amber-700 dark:text-amber-200">
                 Cliquez ici pour vous connecter avec votre code.
               </Link>
@@ -120,11 +137,18 @@ export const RegisterPage: React.FC = () => {
           </div>
         </div>
 
+        {registerError && (
+          <div className="p-3 mb-4 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+            <AlertCircle size={15} className="shrink-0 mt-0.5" />
+            <span>{registerError}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Input
-              label="Nom & Prénom du promoteur"
-              placeholder="Ex: Claire Mballa"
+              label="Nom & Prénom du modérateur"
+              placeholder="Ex: Jean Dupont"
               value={name}
               onChange={(e) => setName(e.target.value)}
               leftIcon={<UserIcon size={16} />}
@@ -133,7 +157,7 @@ export const RegisterPage: React.FC = () => {
 
             <Input
               label="Nom de votre Organisation / Tontine"
-              placeholder="Ex: Club Épargne Douala"
+              placeholder="Ex: Club Épargne Solidarité"
               value={organizationName}
               onChange={(e) => setOrganizationName(e.target.value)}
               leftIcon={<Building size={16} />}
@@ -166,7 +190,7 @@ export const RegisterPage: React.FC = () => {
           <Input
             label="Mot de passe secret"
             type="password"
-            placeholder="••••••••"
+            placeholder="Min. 6 caractères"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             leftIcon={<Lock size={16} />}

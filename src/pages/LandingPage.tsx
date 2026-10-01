@@ -59,13 +59,13 @@ export const LandingPage: React.FC = () => {
                     Créer mon premier groupe
                   </Button>
                 </Link>
-                <Link to="/dashboard">
+                <Link to="/login">
                   <Button
                     variant="outline"
                     size="lg"
                     className="w-full sm:w-auto"
                   >
-                    Explorer la démo en direct
+                    Espace Connexion
                   </Button>
                 </Link>
               </div>
@@ -444,13 +444,13 @@ export const LandingPage: React.FC = () => {
                 Créer un groupe gratuitement
               </Button>
             </Link>
-            <Link to="/dashboard">
+            <Link to="/login">
               <Button
                 variant="ghost"
                 size="lg"
                 className="w-full sm:w-auto text-white hover:bg-white/10 border border-white/30"
               >
-                Découvrir l'espace modérateur
+                Se connecter
               </Button>
             </Link>
           </div>

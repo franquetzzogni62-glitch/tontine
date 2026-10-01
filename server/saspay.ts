@@ -322,10 +322,8 @@ export async function handleGetSasPayStatus(req: Request, res: Response) {
       }
     }
 
-    // Validation confirmée ou demande de confirmation manuelle/retour
-    if (isCompleted || req.query.confirm === 'true') {
-      isCompleted = true;
-
+    // Validation confirmée UNIQUEMENT via l'API SasPay ou Webhook signé (Mode Production strict)
+    if (isCompleted) {
       if (session) {
         session.status = 'completed';
       }

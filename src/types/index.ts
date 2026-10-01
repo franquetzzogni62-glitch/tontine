@@ -24,6 +24,8 @@ export interface User {
   lastName?: string;
   email: string;
   phone: string;
+  passwordHash?: string;
+  salt?: string;
   whatsappNumber?: string;
   avatarUrl?: string;
   role: UserRole;
@@ -87,6 +89,8 @@ export interface TontineGroupMember {
   turnOrder: number;
   accessCode?: string; // Code unique à 6 chiffres pour accéder à ce groupe
   hasPaidToday: boolean;
+  paidToursAdvance?: number; // Nombre de tours payés d'avance
+  paidUntilRound?: number; // Jusqu'à quel tour le membre a déjà réglé ses cotisations
   totalContributedInGroup: number;
   presenceValidated?: boolean;
   guaranteeBalance?: number;
@@ -136,9 +140,12 @@ export interface PaymentTransaction {
   providerTxId?: string;
   cycleNumber?: number;
   roundNumber?: number;
+  turnsCovered?: number; // Nombre de réunions/tours payés (ex: 1, 3, etc.)
+  coveredRounds?: string; // Ex: "Tours #2 à #4"
   receiptNumber?: string;
   verifiedByModerator: boolean;
   webhookReceivedAt?: string;
+  notes?: string;
 }
 
 export interface AppNotification {

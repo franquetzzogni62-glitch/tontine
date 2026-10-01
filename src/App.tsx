@@ -7,14 +7,18 @@ import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { ToastContainer } from './components/ui/ToastContainer';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
 
-// Pages
+// Public Pages
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { JoinGroupPage } from './pages/JoinGroupPage';
+import { PaymentProcessingPage } from './pages/PaymentProcessingPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
-// Dashboard layout and pages
+// Moderator Dashboard layout and pages
 import { DashboardLayout } from './components/layout/DashboardLayout';
 import { OverviewPage } from './pages/dashboard/OverviewPage';
 import { GroupsPage } from './pages/dashboard/GroupsPage';
@@ -26,29 +30,32 @@ import { ReportsPage } from './pages/dashboard/ReportsPage';
 import { SettingsPage } from './pages/dashboard/SettingsPage';
 import { SubscriptionPage } from './pages/dashboard/SubscriptionPage';
 
-// Member view
+// Member Portal Page
 import { MemberPortalPage } from './pages/member/MemberPortalPage';
-import { JoinGroupPage } from './pages/JoinGroupPage';
-
-// Payment Processing & Confirmation View (Mobile Money / Carte)
-import { PaymentProcessingPage } from './pages/PaymentProcessingPage';
-
-// 404
-import { NotFoundPage } from './pages/NotFoundPage';
 
 export default function App() {
   return (
     <AppProvider>
       <BrowserRouter>
         <Routes>
-          {/* Public Landing & Auth */}
+          {/* Public Routes (Accessible sans authentification) */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/join/:groupId" element={<JoinGroupPage />} />
+          <Route path="/payment/processing" element={<PaymentProcessingPage />} />
+          <Route path="/payment-processing" element={<PaymentProcessingPage />} />
 
-          {/* Moderator Dashboard Routes */}
-          <Route path="/dashboard" element={<DashboardLayout />}>
+          {/* Espace Modérateur (Strictement protégé - Rôles : moderator, admin) */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute allowedRoles={['moderator', 'admin']}>
+                <DashboardLayout />
+              </ProtectedRoute>
+            }
+          >
             <Route index element={<OverviewPage />} />
             <Route path="groups" element={<GroupsPage />} />
             <Route path="groups/new" element={<CreateGroupPage />} />
@@ -60,15 +67,17 @@ export default function App() {
             <Route path="settings" element={<SettingsPage />} />
           </Route>
 
-          {/* Member Portal Route */}
-          <Route path="/member" element={<MemberPortalPage />} />
-          <Route path="/join/:groupId" element={<JoinGroupPage />} />
+          {/* Portail Membre (Strictement protégé - Rôle : member avec code 6 chiffres valide) */}
+          <Route
+            path="/member"
+            element={
+              <ProtectedRoute allowedRoles={['member']}>
+                <MemberPortalPage />
+              </ProtectedRoute>
+            }
+          />
 
-          {/* Secure Payment Processing & Confirmation */}
-          <Route path="/payment/processing" element={<PaymentProcessingPage />} />
-          <Route path="/payment-processing" element={<PaymentProcessingPage />} />
-
-          {/* Fallback */}
+          {/* 404 / Fallback */}
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
 

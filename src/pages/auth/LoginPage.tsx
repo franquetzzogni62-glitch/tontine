@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -13,37 +13,49 @@ import {
   Smartphone,
   KeyRound,
   Info,
-  CheckCircle2,
   Building,
+  AlertCircle,
 } from 'lucide-react';
 import { formatAccessCode } from '../../utils/formatters';
 
 export const LoginPage: React.FC = () => {
-  const { loginMemberWithCode, switchRole, addToast } = useApp();
+  const { loginMemberWithCode, loginModerator } = useApp();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [activeTab, setActiveTab] = useState<'member' | 'moderator'>('member');
 
-  // Member login state
-  const [memberPhone, setMemberPhone] = useState('+237 6 75 12 34 56');
-  const [memberCode, setMemberCode] = useState('482 910');
+  // Member login state (100% production : initialisé vide)
+  const [memberPhone, setMemberPhone] = useState('');
+  const [memberCode, setMemberCode] = useState('');
   const [isMemberLoading, setIsMemberLoading] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
 
-  // Moderator login state
-  const [moderatorEmail, setModeratorEmail] = useState('claire.mballa@tontiflow.africa');
-  const [moderatorPassword, setModeratorPassword] = useState('••••••••');
+  // Moderator login state (100% production : initialisé vide)
+  const [moderatorEmail, setModeratorEmail] = useState('');
+  const [moderatorPassword, setModeratorPassword] = useState('');
   const [isModLoading, setIsModLoading] = useState(false);
+  const [modError, setModError] = useState<string | null>(null);
 
   const handleMemberLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setMemberError(null);
+
+    const cleanPhone = memberPhone.trim();
+    const cleanCode = memberCode.replace(/\s+/g, '');
+
+    if (!cleanPhone || !cleanCode) {
+      setMemberError('Veuillez renseigner votre numéro de téléphone et votre code à 6 chiffres.');
+      return;
+    }
+
     setIsMemberLoading(true);
 
     try {
-      const result = await loginMemberWithCode(memberPhone, memberCode);
+      const result = await loginMemberWithCode(cleanPhone, cleanCode);
       if (result.success) {
-        navigate('/member');
+        const from = (location.state as any)?.from?.pathname || '/member';
+        navigate(from, { replace: true });
       } else {
         setMemberError(
           result.error ||
@@ -51,32 +63,39 @@ export const LoginPage: React.FC = () => {
         );
       }
     } catch (err: any) {
-      setMemberError('Erreur de connexion. Veuillez réessayer.');
+      setMemberError(err.message || 'Erreur de connexion. Veuillez réessayer.');
     } finally {
       setIsMemberLoading(false);
     }
   };
 
-  const handleModeratorLogin = (e: React.FormEvent) => {
+  const handleModeratorLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setModError(null);
+
+    const cleanEmail = moderatorEmail.trim();
+    const cleanPassword = moderatorPassword;
+
+    if (!cleanEmail || !cleanPassword) {
+      setModError('Veuillez renseigner votre adresse email et votre mot de passe.');
+      return;
+    }
+
     setIsModLoading(true);
 
-    setTimeout(() => {
+    try {
+      const result = await loginModerator(cleanEmail, cleanPassword);
+      if (result.success) {
+        const from = (location.state as any)?.from?.pathname || '/dashboard';
+        navigate(from, { replace: true });
+      } else {
+        setModError(result.error || 'Email ou mot de passe incorrect.');
+      }
+    } catch (err: any) {
+      setModError(err.message || 'Erreur lors de la connexion modérateur.');
+    } finally {
       setIsModLoading(false);
-      switchRole('moderator');
-      addToast(
-        'Connexion Modérateur réussie',
-        'Bienvenue sur votre espace de gestion TontiFlow.',
-        'success'
-      );
-      navigate('/dashboard');
-    }, 400);
-  };
-
-  const fillMemberDemo = (phone: string, code: string) => {
-    setMemberPhone(phone);
-    setMemberCode(formatAccessCode(code));
-    setMemberError(null);
+    }
   };
 
   return (
@@ -96,7 +115,10 @@ export const LoginPage: React.FC = () => {
         <div className="grid grid-cols-2 border-b border-slate-200 dark:border-slate-800 bg-slate-100/70 dark:bg-slate-900/60 p-1.5 gap-1.5">
           <button
             type="button"
-            onClick={() => setActiveTab('member')}
+            onClick={() => {
+              setActiveTab('member');
+              setMemberError(null);
+            }}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
               activeTab === 'member'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
@@ -109,7 +131,10 @@ export const LoginPage: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setActiveTab('moderator')}
+            onClick={() => {
+              setActiveTab('moderator');
+              setModError(null);
+            }}
             className={`py-2.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
               activeTab === 'moderator'
                 ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
@@ -132,7 +157,7 @@ export const LoginPage: React.FC = () => {
                   Connexion Membre Cotisant
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Seul votre modérateur vous inscrit et vous remet votre code secret à 6 chiffres.
+                  Connectez-vous avec votre numéro et le code secret à 6 chiffres attribué par votre modérateur.
                 </p>
               </div>
 
@@ -140,14 +165,14 @@ export const LoginPage: React.FC = () => {
               <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-300 flex items-start gap-2.5">
                 <Info size={16} className="shrink-0 mt-0.5 text-emerald-600" />
                 <span>
-                  Vous appartenez à plusieurs tontines avec le même numéro ? Saisissez le code à 6
-                  chiffres de la tontine à consulter.
+                  Vous appartenez à plusieurs tontines ? Saisissez le code à 6 chiffres unique de la tontine à consulter.
                 </span>
               </div>
 
               {memberError && (
-                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
-                  {memberError}
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span>{memberError}</span>
                 </div>
               )}
 
@@ -174,7 +199,7 @@ export const LoginPage: React.FC = () => {
                     required
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Code unique à 6 chiffres remis par le promoteur / modérateur du groupe.
+                    Code confidentiel à 6 chiffres remis lors de votre inscription par le modérateur.
                   </p>
                 </div>
 
@@ -189,50 +214,6 @@ export const LoginPage: React.FC = () => {
                   Accéder à ma tontine
                 </Button>
               </form>
-
-              {/* Quick Multi-Group Demo chips */}
-              <div className="pt-4 mt-2 border-t border-slate-100 dark:border-slate-800">
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  Tester le multi-groupes (même numéro, 2 codes distincts) :
-                </span>
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => fillMemberDemo('+237 6 75 12 34 56', '482910')}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 bg-slate-50 dark:bg-slate-800/40 text-left text-xs transition-colors flex items-center justify-between cursor-pointer"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-900 dark:text-white block">
-                        Tontine 1 : Solidarité Douala
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        Amadou Bello (+237 6 75 12 34 56)
-                      </span>
-                    </div>
-                    <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/20">
-                      Code : 482 910
-                    </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => fillMemberDemo('+237 6 75 12 34 56', '739150')}
-                    className="w-full p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:border-emerald-500 bg-slate-50 dark:bg-slate-800/40 text-left text-xs transition-colors flex items-center justify-between cursor-pointer"
-                  >
-                    <div>
-                      <span className="font-bold text-slate-900 dark:text-white block">
-                        Tontine 2 : Commerçants Bonanjo
-                      </span>
-                      <span className="text-[11px] text-slate-500">
-                        Même numéro (+237 6 75 12 34 56)
-                      </span>
-                    </div>
-                    <span className="font-mono font-bold text-teal-600 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/40 px-2 py-0.5 rounded border border-teal-500/20">
-                      Code : 739 150
-                    </span>
-                  </button>
-                </div>
-              </div>
             </div>
           )}
 
@@ -246,14 +227,22 @@ export const LoginPage: React.FC = () => {
                   Connexion Espace Modérateur
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                  Accédez à votre tableau de bord, gérez vos tontines et encaissez vos commissions.
+                  Accédez à votre tableau de bord, gérez vos tontines et encaissez vos cotisations.
                 </p>
               </div>
 
+              {modError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300 flex items-start gap-2">
+                  <AlertCircle size={15} className="shrink-0 mt-0.5" />
+                  <span>{modError}</span>
+                </div>
+              )}
+
               <form onSubmit={handleModeratorLogin} className="space-y-4">
                 <Input
-                  label="Email ou Numéro du modérateur"
-                  type="text"
+                  label="Adresse email du modérateur"
+                  type="email"
+                  placeholder="modérateur@exemple.com"
                   value={moderatorEmail}
                   onChange={(e) => setModeratorEmail(e.target.value)}
                   leftIcon={<Mail size={16} />}
@@ -264,6 +253,7 @@ export const LoginPage: React.FC = () => {
                   <Input
                     label="Mot de passe"
                     type="password"
+                    placeholder="••••••••"
                     value={moderatorPassword}
                     onChange={(e) => setModeratorPassword(e.target.value)}
                     leftIcon={<Lock size={16} />}
@@ -291,14 +281,14 @@ export const LoginPage: React.FC = () => {
                 </Button>
               </form>
 
-              {/* Call to register new moderator */}
+              {/* Inscription nouveau modérateur */}
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
                 <p className="text-xs text-slate-500 mb-2">
                   Vous souhaitez créer et modérer vos propres tontines ?
                 </p>
                 <Link to="/register">
                   <Button variant="outline" size="sm" className="w-full" leftIcon={<Building size={14} />}>
-                    Créer mon compte Modérateur (14 jours d'essai)
+                    Créer mon compte Modérateur
                   </Button>
                 </Link>
               </div>
