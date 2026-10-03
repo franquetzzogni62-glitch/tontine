@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import crypto from 'crypto';
-import { db } from './db.js';
+import { db } from './db.ts';
 
 export interface UserSession {
   token: string;

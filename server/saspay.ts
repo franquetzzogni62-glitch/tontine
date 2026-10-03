@@ -1,6 +1,6 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import crypto from 'crypto';
-import { db } from './db.js';
+import { db } from './db.ts';
 
 // Configuration SasPay selon la documentation officielle https://docs.saspay.me/
 // 1. Clé API secrète Live (sk_live_dpveGiiFhSgw8zT6cWGYBQkXlTnqth1VfDDHctYD__w)
@@ -470,15 +470,22 @@ export async function handleTestSasPayConnection(req: Request, res: Response) {
  * Permet de vérifier ou activer manuellement une souscription après retour de paiement
  */
 export async function handleVerifySubscription(req: Request, res: Response) {
-  const { orderId, sessionId, planId = 'pro', userId = 'user_admin_1', operator = 'SasPay Mobile Money' } = req.body;
+  const sessionUser = (req as any).userSession;
+  const { orderId, sessionId, planId = 'pro', operator = 'SasPay Mobile Money' } = req.body;
 
   let session = (orderId && sessionsCache.get(orderId)) || (sessionId && sessionsCache.get(sessionId));
   if (session) {
     session.status = 'completed';
   }
 
+  // Security: strictly enforce authenticated user session ID
+  const targetUserId = sessionUser?.userId || session?.metadata?.userId;
+  if (!targetUserId) {
+    return res.status(401).json({ error: 'Session utilisateur introuvable.' });
+  }
+
   const updatedUser = db.updateSubscription(
-    session?.metadata?.userId || userId,
+    targetUserId,
     session?.metadata?.planId || planId,
     session?.metadata?.operator || operator
   );

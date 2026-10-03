@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import {
+import type {
   User,
   Member,
   TontineGroup,
@@ -15,7 +15,7 @@ import {
   KycStatus,
   UserRole,
   TontineGroupMember,
-} from '../src/types/index.js';
+} from '../src/types/index.ts';
 
 export interface DatabaseSchema {
   users: User[];
@@ -155,6 +155,81 @@ class DatabaseService {
     return null;
   }
 
+  findMemberTontinesByPhone(phone: string): Array<{
+    group: TontineGroup;
+    member: Member;
+    accessCode: string;
+    moderatorName?: string;
+  }> {
+    const cleanPhone = (phone || '').replace(/[\s\-\(\)\+]/g, '');
+    if (!cleanPhone) return [];
+
+    const results: Array<{
+      group: TontineGroup;
+      member: Member;
+      accessCode: string;
+      moderatorName?: string;
+    }> = [];
+
+    for (const group of this.data.groups) {
+      for (const gm of group.members) {
+        const member = this.getMemberById(gm.memberId);
+        const mPhone = (member?.phone || '').replace(/[\s\-\(\)\+]/g, '');
+        if (
+          mPhone &&
+          cleanPhone &&
+          (mPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(mPhone.slice(-8)))
+        ) {
+          const mod = this.getUserById(group.moderatorId);
+          results.push({
+            group,
+            member: member!,
+            accessCode: gm.accessCode || '000000',
+            moderatorName: mod?.name || 'Administrateur',
+          });
+        }
+      }
+    }
+    return results;
+  }
+
+  updateMemberAccessCode(phone: string, groupId: string, newCode: string): boolean {
+    const cleanPhone = (phone || '').replace(/[\s\-\(\)\+]/g, '');
+    const cleanCode = (newCode || '').replace(/\D/g, '');
+    if (!cleanPhone || cleanCode.length !== 6) return false;
+
+    const group = this.getGroupById(groupId);
+    if (!group) return false;
+
+    let updated = false;
+    const updatedMembers = group.members.map((gm) => {
+      const member = this.getMemberById(gm.memberId);
+      const mPhone = (member?.phone || '').replace(/[\s\-\(\)\+]/g, '');
+      if (
+        mPhone &&
+        cleanPhone &&
+        (mPhone.endsWith(cleanPhone.slice(-8)) || cleanPhone.endsWith(mPhone.slice(-8)))
+      ) {
+        updated = true;
+        return { ...gm, accessCode: cleanCode };
+      }
+      return gm;
+    });
+
+    if (updated) {
+      this.updateGroup(groupId, { members: updatedMembers });
+      return true;
+    }
+    return false;
+  }
+
+  resetModeratorPassword(email: string, newPassword: string): User | null {
+    const user = this.getUserByEmail(email);
+    if (!user) return null;
+    const { hash, salt } = this.hashPassword(newPassword);
+    return this.updateUser(user.id, { passwordHash: hash, salt });
+  }
+
   createUser(user: User): User {
     this.data.users.push(user);
     this.persist();
@@ -276,16 +351,20 @@ class DatabaseService {
   }
 
   // --- Date Calculation Helper ---
-  calculateNextTurnDate(startDateStr: string, currentDay: number, frequency: string, drawDay?: string): string {
-    const d = new Date(startDateStr);
+  calculateNextTurnDate(startDateStr?: string, currentDay = 1, frequency = 'monthly', drawDay?: string): string {
+    let d = startDateStr ? new Date(startDateStr) : new Date();
+    if (isNaN(d.getTime())) {
+      d = new Date();
+    }
+    const offset = Math.max(0, currentDay || 1);
     if (frequency === 'daily') {
-      d.setDate(d.getDate() + currentDay);
+      d.setDate(d.getDate() + offset);
     } else if (frequency === 'weekly') {
-      d.setDate(d.getDate() + currentDay * 7);
+      d.setDate(d.getDate() + offset * 7);
     } else if (frequency === 'monthly') {
-      d.setMonth(d.getMonth() + currentDay);
+      d.setMonth(d.getMonth() + offset);
     } else {
-      d.setDate(d.getDate() + currentDay);
+      d.setDate(d.getDate() + offset);
     }
     return d.toISOString().split('T')[0];
   }
@@ -318,18 +397,101 @@ class DatabaseService {
   }
 
   createGroup(groupData: Omit<TontineGroup, 'id'>): TontineGroup {
-    const newId = `grp_${Date.now()}`;
-    const potAmount = (groupData.contributionAmount - groupData.moderatorCommission) * groupData.totalMembersCount;
-    const nextTurnDate = this.calculateNextTurnDate(groupData.startDate, groupData.currentDay || 1, groupData.frequency, groupData.drawDay);
+    const newId = `grp_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const contributionAmount = Number(groupData.contributionAmount) || 25000;
+    const moderatorCommission = Number(groupData.moderatorCommission) || 0;
+    const membersList = Array.isArray(groupData.members) ? groupData.members : [];
+    const totalMembersCount = Number(groupData.totalMembersCount) || Math.max(membersList.length, 5);
+    const potAmount = (contributionAmount - moderatorCommission) * totalMembersCount;
+
+    const startDate = groupData.startDate || new Date().toISOString().split('T')[0];
+    const frequency = groupData.frequency || 'monthly';
+    const nextTurnDate = this.calculateNextTurnDate(startDate, groupData.currentDay || 1, frequency, groupData.drawDay);
+
+    // Auto-create or ensure members exist
+    const processedMembers: TontineGroupMember[] = [];
+    const beneficiarySchedule: BeneficiaryTurn[] = [];
+
+    membersList.forEach((m: any, idx: number) => {
+      let memberId = m.memberId || m.id;
+      let memberName = m.name || m.memberName || `Membre ${idx + 1}`;
+      let memberPhone = m.phone || m.memberPhone || `+23769000000${idx + 1}`;
+      let accessCode = (m.accessCode || '').replace(/\D/g, '') || `${Math.floor(100000 + Math.random() * 900000)}`;
+
+      if (!memberId) {
+        // Create new member record
+        memberId = `mem_${Date.now()}_${idx + 1}`;
+        const newMember: Member = {
+          id: memberId,
+          name: memberName,
+          phone: memberPhone,
+          email: `${memberId}@tontiflow.africa`,
+          moderatorId: groupData.moderatorId,
+          city: 'Douala',
+          trustScore: 95,
+          kycStatus: 'verified',
+          joinedDate: new Date().toISOString(),
+          groupsCount: 1,
+          totalContributed: 0,
+          totalReceived: 0,
+          guaranteeBalance: contributionAmount,
+          status: 'active',
+        };
+        this.data.members.push(newMember);
+      } else {
+        const existing = this.getMemberById(memberId);
+        if (existing) {
+          memberName = existing.name;
+          memberPhone = existing.phone;
+        }
+      }
+
+      processedMembers.push({
+        memberId,
+        turnOrder: m.turnOrder || idx + 1,
+        accessCode,
+        hasPaidToday: m.hasPaidToday ?? false,
+        totalContributedInGroup: m.totalContributedInGroup || 0,
+        guaranteeBalance: m.guaranteeBalance || contributionAmount,
+        status: 'ACTIVE',
+      });
+
+      beneficiarySchedule.push({
+        order: idx + 1,
+        memberId,
+        memberName,
+        memberPhone,
+        scheduledDate: new Date(Date.now() + idx * 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        potAmount,
+        status: idx === 0 ? 'current' : 'upcoming',
+        accessCode,
+      });
+    });
 
     const newGroup: TontineGroup = {
       ...groupData,
       id: newId,
+      name: groupData.name || 'Nouvelle Tontine',
+      description: groupData.description || 'Groupe de tontine rotative',
+      contributionAmount,
+      moderatorCommission,
+      commissionType: groupData.commissionType || 'fixed',
+      frequency,
+      currency: groupData.currency || 'FCFA',
+      totalMembersCount,
+      currentCycle: groupData.currentCycle || 1,
+      currentDay: groupData.currentDay || 1,
+      status: groupData.status || 'active',
+      startDate,
+      endDate: groupData.endDate || new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       potAmount,
       nextTurnDate,
       customPenaltyAmount: Number(groupData.customPenaltyAmount) || 1000,
       type: groupData.type || 'rotative',
+      members: processedMembers,
+      beneficiarySchedule: groupData.beneficiarySchedule?.length ? groupData.beneficiarySchedule : beneficiarySchedule,
     };
+
     this.data.groups.unshift(newGroup);
     this.persist();
     return newGroup;
@@ -468,7 +630,14 @@ class DatabaseService {
   processTontinePayout(
     groupId: string,
     roundId?: number,
-    options: { force?: boolean; operator?: string; notes?: string } = {}
+    options: {
+      force?: boolean;
+      operator?: string;
+      notes?: string;
+      payoutMethod?: 'mobile_money' | 'cash';
+      signatureDataUrl?: string;
+      witnessName?: string;
+    } = {}
   ): {
     success: boolean;
     message: string;
@@ -506,25 +675,32 @@ class DatabaseService {
     const beneficiaryName = beneficiaryTurn?.memberName || beneficiaryMember?.name || 'Bénéficiaire du Tour';
     const beneficiaryPhone = beneficiaryTurn?.memberPhone || beneficiaryMember?.phone || '+237 6 00 00 00 00';
 
-    const operator = options.operator || 'Orange Money';
-    const payoutRef = `PAYOUT-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
-    const providerTxRef = `GW-DISB-${operator.substring(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
+    const isCash = options.payoutMethod === 'cash' || options.operator === 'Espèces';
+    const operator = isCash ? 'Espèces (Remise en main propre)' : (options.operator || 'Orange Money');
+    const payoutRef = isCash
+      ? `DECHARGE-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`
+      : `PAYOUT-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const providerTxRef = isCash
+      ? `CASH-HANDOVER-${Math.floor(100000 + Math.random() * 900000)}`
+      : `GW-DISB-${operator.substring(0, 3).toUpperCase()}-${Math.floor(100000 + Math.random() * 900000)}`;
 
-    // 3. Simule l'appel à l'API Payout du provider Mobile Money (Orange, MTN, Wave)
+    // 3. Simule l'appel à l'API Payout du provider Mobile Money (Orange, MTN, Wave) ou Remise en main propre
     const simulatedPayoutCall = {
       provider: operator,
-      endpoint: `https://api.${operator.toLowerCase().replace(/\s+/g, '')}.com/v2/disbursements`,
+      endpoint: isCash ? 'local://cash-handover' : `https://api.${operator.toLowerCase().replace(/\s+/g, '')}.com/v2/disbursements`,
       recipientPhone: beneficiaryPhone,
       amountSent: netBeneficiaryAmount,
       currency: 'XAF',
       status: 'SUCCESS',
       gatewayRef: providerTxRef,
-      notes: options.notes || `Versement cagnotte tontine tour #${targetRound}`,
+      notes: options.notes || (isCash ? `Remise espèces en main propre tour #${targetRound}` : `Versement cagnotte tontine tour #${targetRound}`),
       timestamp: new Date().toISOString(),
+      witnessName: options.witnessName,
+      hasSignature: Boolean(options.signatureDataUrl),
     };
 
     // 4. Enregistre la transaction dans le schéma de la base de données avec le détail exact
-    const payoutTx: PayoutTransaction = {
+    const payoutTx: any = {
       id: `payout_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
       groupId: group.id,
       groupName: group.name,
@@ -543,6 +719,9 @@ class DatabaseService {
       date: new Date().toISOString(),
       receiptNumber: `REC-${payoutRef}`,
       simulatedPayoutCall,
+      signatureDataUrl: options.signatureDataUrl,
+      witnessName: options.witnessName,
+      payoutMethod: isCash ? 'cash' : 'mobile_money',
     };
 
     if (!this.data.payouts) {
@@ -985,6 +1164,7 @@ class DatabaseService {
     // Update group member status
     const group = this.getGroupById(newPayment.groupId);
     if (group) {
+      const isCaution = (newPayment.notes || '').toLowerCase().includes('caution') || (newPayment as any).metadata?.type === 'caution';
       const turns = newPayment.turnsCovered || 1;
       const endTurn = Math.min(group.totalMembersCount, group.currentDay + turns - 1);
 
@@ -992,9 +1172,11 @@ class DatabaseService {
         if (m.memberId === newPayment.memberId) {
           return {
             ...m,
-            hasPaidToday: true,
-            paidUntilRound: endTurn,
-            paidToursAdvance: (m.paidToursAdvance || 0) + (turns > 1 ? turns - 1 : 0),
+            hasPaidToday: isCaution ? m.hasPaidToday : true,
+            guaranteeBalance: isCaution ? (m.guaranteeBalance || 0) + newPayment.amount : (m.guaranteeBalance || 0),
+            status: isCaution ? ('ACTIVE' as const) : m.status,
+            paidUntilRound: isCaution ? m.paidUntilRound : endTurn,
+            paidToursAdvance: isCaution ? m.paidToursAdvance : (m.paidToursAdvance || 0) + (turns > 1 ? turns - 1 : 0),
             totalContributedInGroup: (m.totalContributedInGroup || 0) + newPayment.amount,
           };
         }
@@ -1006,8 +1188,11 @@ class DatabaseService {
     // Update member total and trust score
     const member = this.getMemberById(newPayment.memberId);
     if (member) {
+      const isCaution = (newPayment.notes || '').toLowerCase().includes('caution') || (newPayment as any).metadata?.type === 'caution';
       this.updateMember(member.id, {
         totalContributed: (member.totalContributed || 0) + newPayment.amount,
+        guaranteeBalance: isCaution ? (member.guaranteeBalance || 0) + newPayment.amount : (member.guaranteeBalance || 0),
+        status: isCaution ? 'active' : member.status,
         trustScore: Math.min(100, (member.trustScore || 90) + 1),
       });
     }

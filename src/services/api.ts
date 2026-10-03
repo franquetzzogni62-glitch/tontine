@@ -128,6 +128,61 @@ export const api = {
     return handleResponse(res);
   },
 
+  // Password & Access Code Recovery
+  async requestPasswordReset(role: 'moderator' | 'member', identifier: string): Promise<{
+    success: boolean;
+    message: string;
+    otpPreview?: string;
+    target: string;
+    role: string;
+    expiresAt: number;
+  }> {
+    const res = await fetch(`${BASE_URL}/auth/forgot-password/request`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role, identifier }),
+    });
+    return handleResponse(res);
+  },
+
+  async verifyResetOtp(identifier: string, otp: string): Promise<{
+    success: boolean;
+    verified: boolean;
+    role?: 'moderator' | 'member';
+    tontines?: Array<{
+      groupId: string;
+      groupName: string;
+      contributionAmount: number;
+      accessCode: string;
+      moderatorName?: string;
+    }>;
+  }> {
+    const res = await fetch(`${BASE_URL}/auth/forgot-password/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier, otp }),
+    });
+    return handleResponse(res);
+  },
+
+  async resetModeratorPassword(email: string, otp: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE_URL}/auth/forgot-password/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, otp, newPassword }),
+    });
+    return handleResponse(res);
+  },
+
+  async resetMemberAccessCode(phone: string, otp: string, groupId: string, newCode: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${BASE_URL}/auth/forgot-password/reset-member-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, otp, groupId, newCode }),
+    });
+    return handleResponse(res);
+  },
+
   async getPublicGroup(groupId: string): Promise<any> {
     const res = await fetch(`${BASE_URL}/public/groups/${groupId}`);
     return handleResponse(res);
@@ -223,6 +278,9 @@ export const api = {
     groupId: string;
     roundId?: number;
     operator?: string;
+    payoutMethod?: 'mobile_money' | 'cash';
+    signatureDataUrl?: string;
+    witnessName?: string;
     force?: boolean;
     notes?: string;
   }): Promise<{

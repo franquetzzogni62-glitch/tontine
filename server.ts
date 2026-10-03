@@ -1,8 +1,12 @@
-import express, { Request, Response, NextFunction } from 'express';
+import express from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { apiRouter } from './server/routes.js';
-import { handleSasPayWebhook } from './server/saspay.js';
+import dotenv from 'dotenv';
+import { apiRouter } from './server/routes.ts';
+import { handleSasPayWebhook } from './server/saspay.ts';
+
+dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -29,9 +33,9 @@ async function startServer() {
     next();
   });
 
-  // Body parsing middlewares
-  app.use(express.json());
-  app.use(express.urlencoded({ extended: true }));
+  // Body parsing middlewares with payload limits to prevent Denial of Service (DoS)
+  app.use(express.json({ limit: '5mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '5mb' }));
 
   // Root Webhook SasaPay endpoint
   app.post('/webhook/saspay', handleSasPayWebhook);

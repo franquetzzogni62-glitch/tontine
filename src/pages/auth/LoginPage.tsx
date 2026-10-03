@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useApp } from '../../context/AppContext';
 import { Input } from '../../components/ui/Input';
 import { Button } from '../../components/ui/Button';
@@ -22,10 +22,11 @@ export const LoginPage: React.FC = () => {
   const { loginMemberWithCode, loginModerator } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const [activeTab, setActiveTab] = useState<'member' | 'moderator'>('member');
 
-  // Member login state (100% production : initialisé vide)
+  // Member login state (100% production : initialisé vide ou depuis paramètre de redirection)
   const [memberPhone, setMemberPhone] = useState('');
   const [memberCode, setMemberCode] = useState('');
   const [isMemberLoading, setIsMemberLoading] = useState(false);
@@ -36,6 +37,18 @@ export const LoginPage: React.FC = () => {
   const [moderatorPassword, setModeratorPassword] = useState('');
   const [isModLoading, setIsModLoading] = useState(false);
   const [modError, setModError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'moderator') setActiveTab('moderator');
+    else if (tab === 'member') setActiveTab('member');
+
+    const p = searchParams.get('phone');
+    if (p) setMemberPhone(p);
+
+    const c = searchParams.get('code');
+    if (c) setMemberCode(formatAccessCode(c));
+  }, [searchParams]);
 
   const handleMemberLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -198,9 +211,17 @@ export const LoginPage: React.FC = () => {
                     className="font-mono text-base tracking-widest font-bold"
                     required
                   />
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Code confidentiel à 6 chiffres remis lors de votre inscription par le modérateur.
-                  </p>
+                  <div className="flex items-center justify-between mt-1.5">
+                    <p className="text-[11px] text-slate-400">
+                      Code à 6 chiffres propre à votre tontine.
+                    </p>
+                    <Link
+                      to="/forgot-password?tab=member"
+                      className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline shrink-0"
+                    >
+                      Code d'accès oublié ?
+                    </Link>
+                  </div>
                 </div>
 
                 <Button
@@ -261,7 +282,7 @@ export const LoginPage: React.FC = () => {
                   />
                   <div className="text-right mt-1.5">
                     <Link
-                      to="/forgot-password"
+                      to="/forgot-password?tab=moderator"
                       className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline"
                     >
                       Mot de passe oublié ?

@@ -59,6 +59,7 @@ export const MemberPortalPage: React.FC = () => {
   const navigate = useNavigate();
 
   const [selectedGroupToPay, setSelectedGroupToPay] = useState<TontineGroup | null>(null);
+  const [payModalType, setPayModalType] = useState<'contribution' | 'caution'>('contribution');
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [penaltyModalOpen, setPenaltyModalOpen] = useState(false);
   const [selectedGroupForPenalty, setSelectedGroupForPenalty] = useState<TontineGroup | null>(null);
@@ -163,8 +164,9 @@ export const MemberPortalPage: React.FC = () => {
     .filter((p) => p.status === 'paid')
     .reduce((acc, p) => acc + p.amount, 0);
 
-  const handleOpenPay = (group: TontineGroup) => {
+  const handleOpenPay = (group: TontineGroup, type: 'contribution' | 'caution' = 'contribution') => {
     setSelectedGroupToPay(group);
+    setPayModalType(type);
     setPayModalOpen(true);
   };
 
@@ -315,6 +317,69 @@ export const MemberPortalPage: React.FC = () => {
               >
                 <Copy size={13} />
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ========================================================================= */}
+        {/* SECTION ACTION DIRECTE : PAYER MA TONTINE VIA MOBILE MONEY OU CARTE */}
+        {/* ========================================================================= */}
+        {activeGroup && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-white via-emerald-50/40 to-teal-50/30 dark:from-slate-900 dark:via-emerald-950/20 dark:to-slate-900 border border-emerald-500/30 shadow-md space-y-3.5">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <Zap size={13} className="text-amber-500 fill-amber-500" />
+                  Guichet de Paiement Direct
+                </span>
+                <h3 className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white mt-0.5">
+                  Payer ma tontine en ligne
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Réglez votre cotisation périodique ou votre caution en toute sécurité.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-500/20 shrink-0">
+                <ShieldCheck size={13} className="text-emerald-500" />
+                <span>Sécurisé</span>
+              </div>
+            </div>
+
+            {/* Badges des opérateurs supportés */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">Opérateurs acceptés :</span>
+              {['Wave 🌊', 'Orange Money 🍊', 'MTN MoMo 🟡', 'Moov 🔵', 'Carte Bancaire 💳'].map((m) => (
+                <span
+                  key={m}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 shadow-2xs"
+                >
+                  {m}
+                </span>
+              ))}
+            </div>
+
+            {/* Boutons d'action : Cotisation et Caution */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+              <Button
+                variant="emerald"
+                size="md"
+                className="w-full font-bold text-xs justify-center shadow-xs"
+                onClick={() => handleOpenPay(activeGroup, 'contribution')}
+                leftIcon={<Smartphone size={16} />}
+              >
+                Payer ma cotisation ({formatFCFA(activeGroup.contributionAmount)})
+              </Button>
+
+              <Button
+                variant="outline"
+                size="md"
+                className="w-full font-bold text-xs justify-center border-emerald-500/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40"
+                onClick={() => handleOpenPay(activeGroup, 'caution')}
+                leftIcon={<ShieldCheck size={16} className="text-emerald-600" />}
+              >
+                Payer ma caution ({formatFCFA(activeGroup.contributionAmount)})
+              </Button>
             </div>
           </div>
         )}
@@ -499,31 +564,58 @@ export const MemberPortalPage: React.FC = () => {
                       </span>
                     </div>
 
-                    {!hasPaid ? (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="emerald"
-                          size="sm"
-                          onClick={() => handleOpenPay(group)}
-                          leftIcon={<Smartphone size={15} />}
-                        >
-                          Payer
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-amber-700 dark:text-amber-300 border-amber-500/40 text-[11px]"
-                          onClick={() => handleOpenPenalty(group)}
-                          title="Régulariser avec pénalité 50/50"
-                        >
-                          Pénalité ({formatFCFA(group.customPenaltyAmount || 1000)})
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600">
-                        <CheckCircle2 size={16} /> Versement validé
-                      </span>
-                    )}
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+                      {!hasPaid ? (
+                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                          <Button
+                            variant="emerald"
+                            size="sm"
+                            onClick={() => handleOpenPay(group, 'contribution')}
+                            leftIcon={<Smartphone size={14} />}
+                            className="font-bold text-xs"
+                          >
+                            Payer Cotisation
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-emerald-700 dark:text-emerald-300 border-emerald-500/40 text-[11px]"
+                            onClick={() => handleOpenPay(group, 'caution')}
+                            leftIcon={<ShieldCheck size={13} />}
+                            title="Payer le dépôt de garantie"
+                          >
+                            Caution
+                          </Button>
+                          {isMemberDepleted && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-amber-700 dark:text-amber-300 border-amber-500/40 text-[11px]"
+                              onClick={() => handleOpenPenalty(group)}
+                              title="Régulariser avec pénalité"
+                            >
+                              Pénalité
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-1 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                            <CheckCircle2 size={15} /> Cotisation à jour
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-emerald-700 dark:text-emerald-300 border-emerald-500/40 text-[11px]"
+                            onClick={() => handleOpenPay(group, 'caution')}
+                            leftIcon={<ShieldCheck size={13} />}
+                            title="Gérer ou réapprovisionner la caution"
+                          >
+                            Caution
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   <div className="space-y-1">
@@ -621,6 +713,7 @@ export const MemberPortalPage: React.FC = () => {
           isOpen={payModalOpen}
           onClose={() => setPayModalOpen(false)}
           group={selectedGroupToPay}
+          initialPaymentType={payModalType}
         />
       )}
 

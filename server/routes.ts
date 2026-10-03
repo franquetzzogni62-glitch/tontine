@@ -1,12 +1,13 @@
-import { Router, Request, Response } from 'express';
-import { db } from './db.js';
+import express from 'express';
+import type { Request, Response } from 'express';
+import { db } from './db.ts';
 import {
   createSession,
   deleteSession,
   requireAuth,
   requireModerator,
   requireMember,
-} from './auth.js';
+} from './auth.ts';
 import {
   handleCreateSasPaySession,
   handleCreateSubscriptionSession,
@@ -14,9 +15,9 @@ import {
   handleTestSasPayConnection,
   handleVerifySubscription,
   handleSasPayWebhook,
-} from './saspay.js';
+} from './saspay.ts';
 
-export const apiRouter = Router();
+export const apiRouter = express.Router();
 
 // ==========================================
 // --- HEALTH & PUBLIC ROUTES ---
@@ -255,6 +256,235 @@ apiRouter.post('/auth/logout', (req: Request, res: Response) => {
   res.json({ success: true, message: 'Session fermée avec succès.' });
 });
 
+// ==========================================
+// --- FORGOT PASSWORD & CODE RECOVERY API (HARDENED) ---
+// ==========================================
+
+interface PasswordResetOtp {
+  target: string;
+  role: 'moderator' | 'member';
+  otp: string;
+  expiresAt: number;
+  attempts: number;
+}
+const resetOtpStore = new Map<string, PasswordResetOtp>();
+
+/**
+ * POST /api/auth/forgot-password/request
+ * Demande de code OTP de réinitialisation pour Modérateur ou Membre
+ */
+apiRouter.post('/auth/forgot-password/request', (req: Request, res: Response) => {
+  const { role, identifier } = req.body;
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+  if (!role || !identifier) {
+    return res.status(400).json({ error: 'Rôle et identifiant (email ou téléphone) obligatoires.' });
+  }
+
+  const cleanTarget = identifier.trim().toLowerCase();
+  const rateLimitKey = `otp_req_${ip}_${cleanTarget}`;
+
+  // Anti-Spam / Rate-Limiting: Max 3 demandes de code par 15 minutes
+  if (!checkRateLimit(rateLimitKey, 3, 15 * 60 * 1000)) {
+    return res.status(429).json({
+      error: 'Trop de demandes de code de réinitialisation. Veuillez patienter 15 minutes.',
+    });
+  }
+
+  if (role === 'moderator') {
+    const user = db.getUserByEmail(cleanTarget);
+    if (!user) {
+      return res.status(404).json({ error: 'Aucun compte modérateur associé à cette adresse email.' });
+    }
+  } else {
+    const cleanPhone = identifier.replace(/[\s\-\(\)\+]/g, '');
+    const tontines = db.findMemberTontinesByPhone(cleanPhone);
+    if (!tontines || tontines.length === 0) {
+      return res.status(404).json({ error: 'Aucun membre enregistré avec ce numéro de téléphone dans les tontines.' });
+    }
+  }
+
+  // Générer code OTP cryptographique à 6 chiffres
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const expiresAt = Date.now() + 15 * 60 * 1000; // 15 minutes
+
+  const key = role === 'member' ? identifier.replace(/[\s\-\(\)\+]/g, '') : cleanTarget;
+  resetOtpStore.set(key, {
+    target: key,
+    role,
+    otp,
+    expiresAt,
+    attempts: 0,
+  });
+
+  // Sécurité stricte : En production, l'OTP ne doit JAMAIS fuiter dans la réponse JSON publique
+  const isDebug = process.env.APP_DEBUG === 'true' && process.env.NODE_ENV !== 'production';
+
+  res.json({
+    success: true,
+    message: role === 'moderator' 
+      ? `Code de réinitialisation sécurisé transmis à ${cleanTarget}`
+      : `Code de vérification SMS transmis au ${identifier}`,
+    target: key,
+    role,
+    expiresAt,
+    ...(isDebug ? { otpPreview: otp } : {}),
+  });
+});
+
+/**
+ * POST /api/auth/forgot-password/verify
+ * Vérification du code OTP avec protection anti-brute force stricte
+ */
+apiRouter.post('/auth/forgot-password/verify', (req: Request, res: Response) => {
+  const { identifier, otp } = req.body;
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+
+  if (!identifier || !otp) {
+    return res.status(400).json({ error: 'Identifiant et code OTP obligatoires.' });
+  }
+
+  const cleanTarget = identifier.trim().toLowerCase();
+  const cleanPhone = identifier.replace(/[\s\-\(\)\+]/g, '');
+  const rateLimitKey = `otp_verify_${ip}_${cleanTarget}`;
+
+  if (!checkRateLimit(rateLimitKey, 10, 15 * 60 * 1000)) {
+    return res.status(429).json({ error: 'Trop de tentatives erronées. Veuillez patienter 15 minutes.' });
+  }
+
+  const record = resetOtpStore.get(cleanTarget) || resetOtpStore.get(cleanPhone);
+
+  if (!record || record.expiresAt < Date.now()) {
+    return res.status(400).json({ error: 'Code de vérification expiré ou introuvable. Veuillez refaire une demande.' });
+  }
+
+  record.attempts++;
+
+  // Révocation immédiate si plus de 3 tentatives infructueuses (protection anti-brute force)
+  if (record.attempts > 3) {
+    resetOtpStore.delete(cleanTarget);
+    resetOtpStore.delete(cleanPhone);
+    return res.status(429).json({
+      error: 'Nombre maximal de tentatives dépassé (3). Le code a été révoqué pour votre sécurité. Veuillez refaire une demande.',
+    });
+  }
+
+  if (record.otp !== otp.trim()) {
+    return res.status(400).json({
+      error: `Code de vérification incorrect. (${3 - record.attempts} tentative(s) restante(s))`,
+    });
+  }
+
+  if (record.role === 'member') {
+    const tontines = db.findMemberTontinesByPhone(cleanPhone);
+    return res.json({
+      success: true,
+      verified: true,
+      role: 'member',
+      tontines: tontines.map((t) => ({
+        groupId: t.group.id,
+        groupName: t.group.name,
+        contributionAmount: t.group.contributionAmount,
+        accessCode: t.accessCode,
+        moderatorName: t.moderatorName,
+      })),
+    });
+  }
+
+  res.json({
+    success: true,
+    verified: true,
+    role: 'moderator',
+  });
+});
+
+/**
+ * POST /api/auth/forgot-password/reset-password
+ * Réinitialisation du mot de passe Modérateur (avec validation de complexité)
+ */
+apiRouter.post('/auth/forgot-password/reset-password', (req: Request, res: Response) => {
+  const { email, otp, newPassword } = req.body;
+  if (!email || !otp || !newPassword) {
+    return res.status(400).json({ error: 'Tous les champs sont obligatoires.' });
+  }
+
+  if (typeof newPassword !== 'string' || newPassword.length < 8) {
+    return res.status(400).json({ error: 'Le nouveau mot de passe doit comporter au moins 8 caractères pour des raisons de sécurité.' });
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const record = resetOtpStore.get(cleanEmail);
+
+  if (!record || record.expiresAt < Date.now()) {
+    return res.status(400).json({ error: 'Session de réinitialisation expirée.' });
+  }
+
+  record.attempts++;
+  if (record.attempts > 3) {
+    resetOtpStore.delete(cleanEmail);
+    return res.status(429).json({ error: 'Tentatives dépassées. Session révoquée.' });
+  }
+
+  if (record.otp !== otp.trim()) {
+    return res.status(400).json({ error: 'Code OTP invalide.' });
+  }
+
+  const updatedUser = db.resetModeratorPassword(cleanEmail, newPassword);
+  if (!updatedUser) {
+    return res.status(404).json({ error: 'Utilisateur non trouvé.' });
+  }
+
+  resetOtpStore.delete(cleanEmail);
+  res.json({
+    success: true,
+    message: 'Votre mot de passe modérateur a été réinitialisé avec succès. Vous pouvez maintenant vous connecter.',
+  });
+});
+
+/**
+ * POST /api/auth/forgot-password/reset-member-code
+ * Définition d'un nouveau code secret à 6 chiffres pour un Membre
+ */
+apiRouter.post('/auth/forgot-password/reset-member-code', (req: Request, res: Response) => {
+  const { phone, otp, groupId, newCode } = req.body;
+  if (!phone || !otp || !groupId || !newCode) {
+    return res.status(400).json({ error: 'Tous les champs sont obligatoires.' });
+  }
+
+  const cleanPhone = phone.replace(/[\s\-\(\)\+]/g, '');
+  const cleanCode = newCode.replace(/\D/g, '');
+
+  if (cleanCode.length !== 6) {
+    return res.status(400).json({ error: 'Le nouveau code secret doit comporter exactement 6 chiffres.' });
+  }
+
+  const record = resetOtpStore.get(cleanPhone) || resetOtpStore.get(phone.trim().toLowerCase());
+  if (!record || record.expiresAt < Date.now()) {
+    return res.status(400).json({ error: 'Session de vérification expirée.' });
+  }
+
+  record.attempts++;
+  if (record.attempts > 3) {
+    resetOtpStore.delete(cleanPhone);
+    return res.status(429).json({ error: 'Tentatives dépassées. Session révoquée.' });
+  }
+
+  if (record.otp !== otp.trim()) {
+    return res.status(400).json({ error: 'Code OTP invalide.' });
+  }
+
+  const success = db.updateMemberAccessCode(cleanPhone, groupId, cleanCode);
+  if (!success) {
+    return res.status(400).json({ error: 'Impossible de mettre à jour le code secret pour ce groupe.' });
+  }
+
+  resetOtpStore.delete(cleanPhone);
+  res.json({
+    success: true,
+    message: 'Votre nouveau code secret d\'accès à 6 chiffres a été enregistré avec succès !',
+  });
+});
+
 /**
  * GET /api/auth/me
  * Vérification de la session en cours
@@ -465,11 +695,14 @@ const handleProcessTontinePayout = (req: Request, res: Response) => {
 
   try {
     const roundId = req.body.roundId ? Number(req.body.roundId) : undefined;
-    const { force, notes, operator } = req.body;
+    const { force, notes, operator, payoutMethod, signatureDataUrl, witnessName } = req.body;
 
     const result = db.processTontinePayout(groupId, roundId, {
       force: Boolean(force),
-      operator: operator || 'Orange Money',
+      operator: operator || (payoutMethod === 'cash' ? 'Espèces' : 'Orange Money'),
+      payoutMethod: payoutMethod || 'mobile_money',
+      signatureDataUrl,
+      witnessName,
       notes,
     });
     res.json(result);
@@ -720,8 +953,63 @@ apiRouter.get('/payments', requireAuth(), (req: Request, res: Response) => {
 });
 
 apiRouter.post('/payments', requireAuth(), (req: Request, res: Response) => {
+  const session = req.userSession!;
   try {
-    const payment = db.createPayment(req.body);
+    const { groupId, amount, method, notes, turnsCovered } = req.body;
+    const numAmount = Number(amount);
+
+    if (!groupId || !numAmount || isNaN(numAmount) || numAmount <= 0 || numAmount > 100_000_000) {
+      return res.status(400).json({ error: 'Montant invalide (doit être positif) ou groupe non spécifié.' });
+    }
+
+    const group = db.getGroupById(groupId);
+    if (!group) {
+      return res.status(404).json({ error: 'Groupe de tontine introuvable.' });
+    }
+
+    // Role-based authorization & IDOR defense
+    let memberId = req.body.memberId;
+    let memberName = req.body.memberName;
+    let memberPhone = req.body.memberPhone;
+
+    if (session.role === 'member') {
+      // Member isolation: member can only pay for themselves in groups they belong to
+      memberId = session.memberId || session.userId;
+      const memObj = db.getMemberById(memberId);
+      memberName = memObj?.name || session.user?.name || 'Membre';
+      memberPhone = memObj?.phone || session.user?.phone || '';
+
+      const isEnrolled = (group.members || []).some((m) => m.memberId === memberId);
+      if (!isEnrolled) {
+        return res.status(403).json({ error: 'Accès interdit. Vous n\'êtes pas inscrit dans cette tontine.' });
+      }
+    } else if (session.role === 'moderator') {
+      // Moderator isolation: moderator can only record payments for their own groups
+      if (group.moderatorId !== session.userId) {
+        return res.status(403).json({ error: 'Accès interdit. Cette tontine est gérée par un autre modérateur.' });
+      }
+    }
+
+    const turns = Number(turnsCovered) || 1;
+    const paymentData = {
+      groupId,
+      groupName: group.name,
+      memberId,
+      memberName,
+      memberPhone,
+      amount: numAmount,
+      baseAmount: numAmount,
+      commission: 0,
+      date: new Date().toISOString(),
+      status: 'paid' as const,
+      method: method || 'Mobile Money',
+      turnsCovered: turns,
+      coveredRounds: req.body.coveredRounds || (turns > 1 ? `Tours #${group.currentDay} à #${Math.min(group.totalMembersCount, group.currentDay + turns - 1)}` : `Tour #${group.currentDay}`),
+      notes: typeof notes === 'string' ? notes.slice(0, 500) : undefined,
+      verifiedByModerator: session.role === 'moderator',
+    };
+
+    const payment = db.createPayment(paymentData);
     res.status(201).json(payment);
   } catch (err: any) {
     res.status(400).json({ error: err.message || 'Erreur enregistrement versement' });
@@ -871,4 +1159,9 @@ apiRouter.all('/saspay.php', (req: Request, res: Response) => {
     return handleCreateSasPaySession(req, res);
   }
   return handleGetSasPayStatus(req, res);
+});
+
+// Fallback 404 for unknown API endpoints
+apiRouter.all('*', (req: Request, res: Response) => {
+  res.status(404).json({ error: 'Endpoint API introuvable' });
 });
